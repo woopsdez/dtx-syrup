@@ -26,12 +26,15 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .status{font-size:12px;color:var(--muted);text-align:right}
 @media(max-width:599px){.status{display:none}} /* 狭い画面ではヘッダを 1 行に保ち、1 画面目にタブまで収める */
 .main{display:grid;grid-template-columns:1fr;gap:16px;padding-block:12px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-.main[data-view="song"] .list{display:none}
-.main[data-view="list"] .song{display:none}
+/* 画面は 3 つ: list（曲リスト）/ song（1 曲のプレイヤー）/ make（YouTube から作る）。狭い画面では 1 つずつ、広い画面ではリスト + どちらか */
+.main[data-view="list"] .song,.main[data-view="list"] .make{display:none}
+.main[data-view="song"] .list,.main[data-view="song"] .make{display:none}
+.main[data-view="make"] .list,.main[data-view="make"] .song{display:none}
 @media(min-width:960px){
   .main{grid-template-columns:320px minmax(0,1fr);align-items:start}
   .main[data-side="narrow"]{grid-template-columns:84px minmax(0,1fr)}
-  .main[data-view] .list,.main[data-view] .song{display:block}
+  .main[data-view] .list{display:block}
+  .main[data-view="list"] .song{display:block}
   .list{position:sticky;top:64px}
   .back{display:none}
   .list-head .side{display:grid}
@@ -43,7 +46,8 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   /* 畳んだ帯ではスクロールバーを出さない（右だけ余白が狭くなり、サムネと » の中心もずれるため）。ホイール・ドラッグで送れる */
   .main[data-side="narrow"] .songs{max-height:calc(100vh - 120px);scrollbar-width:none}
   .main[data-side="narrow"] .songs::-webkit-scrollbar{display:none}
-  .main[data-side="narrow"] .meta,.main[data-side="narrow"] .add,.main[data-side="narrow"] .jobs,.main[data-side="narrow"] .results{display:none}
+  .main[data-side="narrow"] .meta,.main[data-side="narrow"] .mk .lbl,.main[data-side="narrow"] #jobsMini{display:none}
+  .main[data-side="narrow"] .mk{width:36px;padding:6px 0}
 }
 .side{display:none;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);place-items:center;color:var(--muted);font-size:11px}
 h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
@@ -67,7 +71,28 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .add input{flex:1;min-width:0;font:inherit;font-size:12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
 .add input::placeholder{color:var(--muted)}
 /* YouTube の検索結果（yt-dlp の ytsearch。API キー不要） */
+/* 「YouTube から作る」ペイン: 検索欄 → 進み具合 → 結果（左）と試聴の小窓（右、狭い画面では上に固定） */
+.make{min-width:0;max-width:782px;width:100%;justify-self:center}
+.make-top{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.make-top .add{flex:1}
+.mback{flex:none;width:36px;height:36px;border-radius:50%;background:var(--panel2);color:var(--fg);font-size:18px;display:grid;place-items:center}
+.make .jobs{margin-bottom:10px}
+.make-body{display:grid;grid-template-columns:1fr;gap:12px;align-items:start}
+.pcol{position:sticky;top:58px;z-index:1;background:var(--bg);order:-1}
+.pcol:empty{display:none}
+@media(min-width:960px){.make-body{grid-template-columns:minmax(0,1fr) 300px}.pcol{order:0;top:64px}} /* 広い画面では小窓を右に */
+.mk b{font-weight:700}
+.jobs-mini{width:100%;text-align:left;font-size:12px;color:var(--muted);padding:4px 2px}
 .results{display:flex;flex-direction:column;gap:6px}
+.pcard{display:flex;flex-direction:column;gap:6px}
+.yt{position:relative;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden}
+.yt iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.pc-h{display:flex;align-items:center;gap:6px;font-size:12px}
+.pc-h .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700}
+.pc-h .x{flex:none;width:22px;height:22px;border-radius:6px;color:var(--muted);line-height:1;display:grid;place-items:center;text-decoration:none}
+.res-play{position:relative;padding:0;border-radius:4px;overflow:hidden;width:80px;height:45px;display:block;cursor:pointer}
+.res-play .pl{position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:15px;background:rgba(0,0,0,.28)}
+.res[aria-current="true"]{border-color:var(--fg)}
 .res-h{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
 .res-h .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .res-h .x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--muted);line-height:1}
@@ -170,11 +195,21 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
         <button class="side" id="sideBtn" aria-label="サイドバーを畳む" title="サイドバーを畳む">«</button>
       </div>
       <button class="btn primary small wide" id="batchBtn"></button>
-      <form class="add" id="addForm"><input type="text" id="ytUrl" autocomplete="off" placeholder="曲名で YouTube を検索、または URL を貼る" aria-label="曲名か YouTube の URL"><button class="btn small" type="submit" id="addBtn">検索</button></form>
-      <div class="results" id="results" hidden></div>
-      <div class="jobs" id="jobs" hidden aria-live="polite"></div>
+      <button class="btn small wide mk" id="makeBtn" title="YouTube から作る"><b>＋</b><span class="lbl"> YouTube から作る</span></button>
+      <button class="jobs-mini" id="jobsMini" hidden title="開いて確認"></button>
     </div>
     <ul class="songs" id="songs"></ul>
+  </section>
+  <section class="make" id="makeView">
+    <div class="make-top">
+      <button class="mback" id="makeBack" aria-label="戻る" title="戻る">←</button>
+      <form class="add" id="addForm"><input type="text" id="ytUrl" autocomplete="off" placeholder="曲名で YouTube を検索、または URL を貼る" aria-label="曲名か YouTube の URL"><button class="btn small" type="submit" id="addBtn">検索</button></form>
+    </div>
+    <div class="jobs" id="jobs" hidden aria-live="polite"></div>
+    <div class="make-body">
+      <div class="results" id="results" hidden></div>
+      <div class="pcol" id="ytSlot"></div>
+    </div>
   </section>
   <section class="song" id="songView">
     <div class="stage">
@@ -596,7 +631,7 @@ async function pollJobs(silent) {
   clearTimeout(jobTimer); jobTimer = 0;
   try {
     const { jobs } = await api('/api/jobs');
-    renderJobs(jobs);
+    renderJobs(jobs); renderJobsMini(jobs);
     const finished = jobs.filter((j) => j.finished && !seenJobs.has(j.id));
     finished.forEach((j) => seenJobs.add(j.id));
     if (!silent) for (const j of finished) toast(j.state === 'done' ? `${j.dir} を作りました（Master / Beginner / Easy）` : `TubeDTX が失敗しました。曲リストの上に理由を出しています`);
@@ -605,6 +640,7 @@ async function pollJobs(silent) {
   } catch (e) { jobTimer = setTimeout(pollJobs, 5000); }
 }
 $('#jobs').addEventListener('click', (e) => { const b = e.target.closest('.x'); if (b) { dismissedJobs.add(b.dataset.id); pollJobs(true); } });
+// 曲リストで曲を選んだら make ペインから戻る。失敗したジョブは make ペインを開くと見える
 // 入力欄は 1 つ: URL なら「作る」、それ以外は YouTube を検索して結果から選ぶ
 const looksLikeUrl = (s) => /^(https?:\/\/|www\.|youtu\.be\/|youtube\.com\/)/i.test(s);
 async function startAdd(url) {
@@ -613,27 +649,57 @@ async function startAdd(url) {
   catch (err) { toast(`開始できません: ${err.message}`); return false; }
 }
 const fmtDur = (d) => `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`;
+let lastResults = [];
+const makeBtn = (r) => (r.exists ? '<span class="have">追加済み</span>' : `<button class="btn small" data-url="${esc(r.url)}">作る</button>`);
 function renderResults(query, results) {
+  lastResults = results;
   const el = $('#results');
   el.hidden = false;
-  el.innerHTML = `<div class="res-h"><span class="t">「${esc(query)}」 ${results.length} 件</span><button class="x" id="resClose" aria-label="閉じる">×</button></div>` +
-    (results.length ? results.map((r) => `<div class="res">
-      <img src="${esc(r.thumb)}" alt="" loading="lazy">
+  el.innerHTML = `<div class="res-h"><span class="t">「${esc(query)}」 ${results.length} 件 · サムネを押すと試聴</span><button class="x" id="resClose" aria-label="閉じる">×</button></div>` +
+    (results.length ? results.map((r) => `<div class="res" data-id="${esc(r.id)}">
+      <button class="res-play" data-id="${esc(r.id)}" aria-label="試聴: ${esc(r.title)}"><img src="${esc(r.thumb)}" alt="" loading="lazy"><span class="pl">▶</span></button>
       <div><div class="rt" title="${esc(r.title)}">${esc(r.title)}</div><div class="rs">${esc(r.channel)}${r.duration != null ? ' · ' + fmtDur(r.duration) : ''}</div></div>
-      ${r.exists ? '<span class="have">追加済み</span>' : `<button class="btn small" data-url="${esc(r.url)}">作る</button>`}
+      ${makeBtn(r)}
     </div>`).join('') : '<div class="res-empty">見つかりませんでした</div>');
 }
-$('#results').addEventListener('click', async (e) => {
-  if (e.target.closest('#resClose')) { $('#results').hidden = true; return; }
+// 試聴: YouTube の埋め込みプレイヤーを結果の上に出す（youtube-nocookie、サムネを押したときだけ読み込む）
+function openPreview(r) {
+  const slot = $('#ytSlot'); if (!slot) return;
+  slot.innerHTML = `<div class="pcard">
+    <div class="yt"><iframe src="https://www.youtube-nocookie.com/embed/${esc(r.id)}?autoplay=1&rel=0" title="${esc(r.title)}" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    <div class="pc-h"><span class="t" title="${esc(r.title)}">${esc(r.title)}</span>${makeBtn(r)}<a class="x" href="${esc(r.url)}" target="_blank" rel="noopener" title="YouTube で開く">↗</a><button class="x" id="ytClose" aria-label="試聴をやめる">×</button></div>
+  </div>`;
+  document.querySelectorAll('#results .res').forEach((row) => row.setAttribute('aria-current', row.dataset.id === r.id));
+}
+function closePreview() { const slot = $('#ytSlot'); if (slot) slot.innerHTML = ''; document.querySelectorAll('#results .res').forEach((row) => row.removeAttribute('aria-current')); }
+function closeResults() { closePreview(); $('#results').hidden = true; }
+$('.make-body').addEventListener('click', async (e) => { // 結果と小窓の両方のボタン
+  if (e.target.closest('#resClose')) { closeResults(); return; }
+  if (e.target.closest('#ytClose')) { closePreview(); return; }
+  const p = e.target.closest('.res-play');
+  if (p) { const r = lastResults.find((x) => x.id === p.dataset.id); if (r) openPreview(r); return; }
   const b = e.target.closest('button[data-url]'); if (!b) return;
   b.disabled = true;
-  if (await startAdd(b.dataset.url)) { $('#results').hidden = true; $('#ytUrl').value = ''; $('#addBtn').textContent = '検索'; } else b.disabled = false;
+  if (await startAdd(b.dataset.url)) { closePreview(); $('#ytUrl').value = ''; $('#addBtn').textContent = '検索'; } else b.disabled = false;
 });
+function openMake() { $('#main').dataset.view = 'make'; setTimeout(() => $('#ytUrl').focus(), 50); }
+function closeMake() { closePreview(); $('#main').dataset.view = window.innerWidth >= 960 ? 'song' : 'list'; }
+$('#makeBtn').addEventListener('click', openMake);
+$('#jobsMini').addEventListener('click', openMake);
+$('#makeBack').addEventListener('click', closeMake);
+function renderJobsMini(jobs) { // 曲リスト側の 1 行: 動いている間と、失敗を消すまで
+  const el = $('#jobsMini');
+  const active = jobs.filter(isActive), failed = jobs.filter((j) => j.state === 'failed' && !dismissedJobs.has(j.id));
+  if (active.length) { el.hidden = false; el.textContent = `⏳ ${active[0].phase || '準備中'}`; }
+  else if (failed.length) { el.hidden = false; el.textContent = '✗ TubeDTX が失敗しました（押して確認）'; }
+  else el.hidden = true;
+}
 $('#ytUrl').addEventListener('input', () => { $('#addBtn').textContent = looksLikeUrl($('#ytUrl').value.trim()) ? '作る' : '検索'; });
 $('#addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const q = $('#ytUrl').value.trim(); if (!q) return;
   if (looksLikeUrl(q)) { if (await startAdd(q)) { $('#ytUrl').value = ''; $('#addBtn').textContent = '検索'; } return; }
+  closePreview();
   const el = $('#results'); el.hidden = false; el.innerHTML = '<div class="res-empty">YouTube を検索中…（数秒）</div>';
   try { const r = await api(`/api/search?q=${encodeURIComponent(q)}`); renderResults(q, r.results); }
   catch (err) { el.innerHTML = `<div class="res-empty">検索に失敗: ${esc(err.message)}</div>`; }
