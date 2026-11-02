@@ -43,7 +43,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
   /* 畳んだ帯ではスクロールバーを出さない（右だけ余白が狭くなり、サムネと » の中心もずれるため）。ホイール・ドラッグで送れる */
   .main[data-side="narrow"] .songs{max-height:calc(100vh - 120px);scrollbar-width:none}
   .main[data-side="narrow"] .songs::-webkit-scrollbar{display:none}
-  .main[data-side="narrow"] .meta,.main[data-side="narrow"] .add,.main[data-side="narrow"] .jobs{display:none}
+  .main[data-side="narrow"] .meta,.main[data-side="narrow"] .add,.main[data-side="narrow"] .jobs,.main[data-side="narrow"] .results{display:none}
 }
 .side{display:none;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);place-items:center;color:var(--muted);font-size:11px}
 h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
@@ -66,6 +66,17 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .add{display:flex;gap:6px}
 .add input{flex:1;min-width:0;font:inherit;font-size:12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
 .add input::placeholder{color:var(--muted)}
+/* YouTube の検索結果（yt-dlp の ytsearch。API キー不要） */
+.results{display:flex;flex-direction:column;gap:6px}
+.res-h{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.res-h .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.res-h .x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--muted);line-height:1}
+.res{display:grid;grid-template-columns:80px minmax(0,1fr) auto;gap:8px;align-items:center;padding:4px 6px;border:1px solid var(--line);border-radius:8px}
+.res img{width:80px;height:45px;object-fit:cover;border-radius:4px;background:var(--panel2);display:block}
+.res .rt{font-size:12px;font-weight:700;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.res .rs{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res .have{font-size:11px;color:var(--good);white-space:nowrap}
+.res-empty{font-size:12px;color:var(--muted);padding:6px 2px}
 /* TubeDTX の進み具合。動いている間は流れるバー、失敗は要点と直し方を残す */
 .jobs{display:flex;flex-direction:column;gap:6px}
 .job{font-size:12px;border:1px solid var(--line);border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:5px}
@@ -159,7 +170,8 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
         <button class="side" id="sideBtn" aria-label="サイドバーを畳む" title="サイドバーを畳む">«</button>
       </div>
       <button class="btn primary small wide" id="batchBtn"></button>
-      <form class="add" id="addForm"><input type="url" id="ytUrl" placeholder="YouTube の URL を貼って曲を追加" aria-label="YouTube の URL"><button class="btn small" type="submit">作る</button></form>
+      <form class="add" id="addForm"><input type="text" id="ytUrl" autocomplete="off" placeholder="曲名で YouTube を検索、または URL を貼る" aria-label="曲名か YouTube の URL"><button class="btn small" type="submit" id="addBtn">検索</button></form>
+      <div class="results" id="results" hidden></div>
       <div class="jobs" id="jobs" hidden aria-live="polite"></div>
     </div>
     <ul class="songs" id="songs"></ul>
@@ -593,12 +605,38 @@ async function pollJobs(silent) {
   } catch (e) { jobTimer = setTimeout(pollJobs, 5000); }
 }
 $('#jobs').addEventListener('click', (e) => { const b = e.target.closest('.x'); if (b) { dismissedJobs.add(b.dataset.id); pollJobs(true); } });
+// 入力欄は 1 つ: URL なら「作る」、それ以外は YouTube を検索して結果から選ぶ
+const looksLikeUrl = (s) => /^(https?:\/\/|www\.|youtu\.be\/|youtube\.com\/)/i.test(s);
+async function startAdd(url) {
+  if (tubedtxInfo && !tubedtxInfo.ok) { toast(`TubeDTX が見つかりません: ${tubedtxInfo.dir}`); return false; }
+  try { await api('/api/add', { url }); toast('TubeDTX を開始しました。進み具合は曲リストの上に出ます'); pollJobs(true); return true; }
+  catch (err) { toast(`開始できません: ${err.message}`); return false; }
+}
+const fmtDur = (d) => `${Math.floor(d / 60)}:${String(Math.floor(d % 60)).padStart(2, '0')}`;
+function renderResults(query, results) {
+  const el = $('#results');
+  el.hidden = false;
+  el.innerHTML = `<div class="res-h"><span class="t">「${esc(query)}」 ${results.length} 件</span><button class="x" id="resClose" aria-label="閉じる">×</button></div>` +
+    (results.length ? results.map((r) => `<div class="res">
+      <img src="${esc(r.thumb)}" alt="" loading="lazy">
+      <div><div class="rt" title="${esc(r.title)}">${esc(r.title)}</div><div class="rs">${esc(r.channel)}${r.duration != null ? ' · ' + fmtDur(r.duration) : ''}</div></div>
+      ${r.exists ? '<span class="have">追加済み</span>' : `<button class="btn small" data-url="${esc(r.url)}">作る</button>`}
+    </div>`).join('') : '<div class="res-empty">見つかりませんでした</div>');
+}
+$('#results').addEventListener('click', async (e) => {
+  if (e.target.closest('#resClose')) { $('#results').hidden = true; return; }
+  const b = e.target.closest('button[data-url]'); if (!b) return;
+  b.disabled = true;
+  if (await startAdd(b.dataset.url)) { $('#results').hidden = true; $('#ytUrl').value = ''; $('#addBtn').textContent = '検索'; } else b.disabled = false;
+});
+$('#ytUrl').addEventListener('input', () => { $('#addBtn').textContent = looksLikeUrl($('#ytUrl').value.trim()) ? '作る' : '検索'; });
 $('#addForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const url = $('#ytUrl').value.trim(); if (!url) return;
-  if (tubedtxInfo && !tubedtxInfo.ok) { toast(`TubeDTX が見つかりません: ${tubedtxInfo.dir}`); return; }
-  try { await api('/api/add', { url }); $('#ytUrl').value = ''; toast('TubeDTX を開始しました。進み具合は曲リストの上に出ます'); pollJobs(true); }
-  catch (err) { toast(`開始できません: ${err.message}`); }
+  const q = $('#ytUrl').value.trim(); if (!q) return;
+  if (looksLikeUrl(q)) { if (await startAdd(q)) { $('#ytUrl').value = ''; $('#addBtn').textContent = '検索'; } return; }
+  const el = $('#results'); el.hidden = false; el.innerHTML = '<div class="res-empty">YouTube を検索中…（数秒）</div>';
+  try { const r = await api(`/api/search?q=${encodeURIComponent(q)}`); renderResults(q, r.results); }
+  catch (err) { el.innerHTML = `<div class="res-empty">検索に失敗: ${esc(err.message)}</div>`; }
 });
 $('#backBtn').addEventListener('click', () => { $('#main').dataset.view = 'list'; });
 const setSide = (narrow) => {

@@ -72,12 +72,25 @@ def variant_status(folder: Path, difficulty: str) -> str | None:
     return 'auto' if dtx.is_generated_file(p) else 'hand'
 
 
+def load_json(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
 @dataclass
 class Song:
     folder: Path
     master_path: Path
     master: dtx.Chart
     settings: dict = field(default_factory=dict)
+    config: dict = field(default_factory=dict)   # tube_dtx_config.json（movie_url など）
+
+    @property
+    def video_id(self) -> str:
+        import tubedtx
+        return tubedtx.video_id(self.config.get('movie_url') or '')
 
     @property
     def name(self) -> str:
@@ -132,6 +145,7 @@ class Song:
             'thumb': f'/media/{index}/pre.jpg' if (self.folder / 'pre.jpg').exists() else None,
             'audio': f'/media/{index}/bgm.ogg' if (self.folder / 'bgm.ogg').exists() else None,
             'has': self.status(),
+            'videoId': self.video_id,
             'rules': {d: self.rules(d) for d in FILES},
             'customRules': {d: d in self.settings.get('rules', {}) for d in FILES},
         }
@@ -149,7 +163,7 @@ def scan(root: Path = DEFAULT_SONGLIST) -> list[Song]:
         master = dtx.parse(master_path)
         if not master.notes:
             continue
-        songs.append(Song(folder, master_path, master, load_settings(folder)))
+        songs.append(Song(folder, master_path, master, load_settings(folder), load_json(folder / CONFIG_NAME)))
     return songs
 
 

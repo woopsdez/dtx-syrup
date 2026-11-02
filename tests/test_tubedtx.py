@@ -21,6 +21,26 @@ class CleanUrlTest(unittest.TestCase):
         self.assertEqual(tubedtx.clean_url('  https://example.com/x?y=1 '), 'https://example.com/x?y=1')
 
 
+class SearchParseTest(unittest.TestCase):
+    def test_parse_flat_playlist_lines(self):
+        text = '\n'.join([
+            '{"_type": "url", "id": "abc123XYZ_-", "title": "Song A", "channel": "Ch A", "duration": 215, "view_count": 1000}',
+            'not json',
+            '{"id": "def456", "title": "Song B", "uploader": "Up B"}',
+            '{"_type": "playlist", "id": "ytsearch", "title": "x"}',
+        ])
+        r = tubedtx.parse_search(text)
+        self.assertEqual([x['id'] for x in r], ['abc123XYZ_-', 'def456'])
+        self.assertEqual(r[0]['url'], 'https://www.youtube.com/watch?v=abc123XYZ_-')
+        self.assertEqual(r[0]['channel'], 'Ch A')
+        self.assertEqual(r[1]['channel'], 'Up B')
+        self.assertTrue(r[0]['thumb'].endswith('/abc123XYZ_-/mqdefault.jpg'))
+
+    def test_video_id(self):
+        self.assertEqual(tubedtx.video_id('https://youtu.be/abc123XYZ_-?si=1'), 'abc123XYZ_-')
+        self.assertEqual(tubedtx.video_id('https://example.com/'), '')
+
+
 class DescribeTest(unittest.TestCase):
     def test_phase_and_403_hint(self):
         log = '\n'.join([

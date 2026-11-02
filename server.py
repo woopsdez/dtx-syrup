@@ -147,6 +147,16 @@ class Handler(BaseHTTPRequestHandler):
                 }})
             if u.path == '/api/jobs':
                 return self.send_json({'jobs': self.state.jobs.list()})
+            if u.path == '/api/search':
+                query = (q.get('q') or [''])[0].strip()
+                if not tubedtx.available()['ok']:
+                    return self.send_json({'error': f'TubeDTX が見つかりません: {tubedtx.TUBEDTX_DIR}'}, 400)
+                results = tubedtx.search(query, n=12) if query else []
+                with self.state.lock:
+                    have = {s.video_id for s in self.state.songs if s.video_id}
+                for r in results:
+                    r['exists'] = r['id'] in have   # もう songlist にある動画
+                return self.send_json({'query': query, 'results': results})
             if u.path.startswith('/media/'):
                 parts = u.path.split('/')
                 if len(parts) == 4 and parts[3] in songs_mod.MEDIA:

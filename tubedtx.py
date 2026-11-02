@@ -55,6 +55,54 @@ def clean_url(url: str) -> str:
     return url
 
 
+def video_id(url: str) -> str:
+    """YouTube の URL から動画 ID。取れなければ ''。"""
+    u = clean_url(url)
+    return u.split('watch?v=', 1)[1] if 'watch?v=' in u else ''
+
+
+def parse_search(text: str) -> list[dict]:
+    """yt-dlp -j --flat-playlist の出力（1 行 1 JSON）を検索結果に整える。"""
+    out: list[dict] = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith('{'):
+            continue
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        vid = e.get('id')
+        if not vid or e.get('_type') not in (None, 'url', 'video'):
+            continue
+        out.append({
+            'id': vid,
+            'url': f'https://www.youtube.com/watch?v={vid}',
+            'title': e.get('title') or '',
+            'channel': e.get('channel') or e.get('uploader') or '',
+            'duration': e.get('duration'),
+            'views': e.get('view_count'),
+            'thumb': f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+        })
+    return out
+
+
+def search(query: str, n: int = 12, timeout: int = 60) -> list[dict]:
+    """YouTube を yt-dlp の ytsearch で検索する（API キー不要）。TubeDTX venv の yt-dlp を使う。"""
+    query = (query or '').strip()
+    if not query:
+        return []
+    cmd = [str(VENV_PYTHON), '-X', 'utf8', '-m', 'yt_dlp', '--flat-playlist', '-j', '--no-warnings', f'ytsearch{int(n)}:{query}']
+    env = dict(os.environ, PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
+    proc = subprocess.run(cmd, cwd=str(TUBEDTX_DIR), env=env, capture_output=True, text=True,
+                          encoding='utf-8', errors='replace', timeout=timeout)
+    results = parse_search(proc.stdout)
+    if not results and proc.returncode != 0:
+        err = [ln for ln in proc.stderr.splitlines() if ln.strip()]
+        raise RuntimeError(err[-1] if err else f'yt-dlp exited with {proc.returncode}')
+    return results
+
+
 def describe(log: str, state: str) -> dict:
     """ジョブのログから、段階・失敗の要点・直し方のヒントを拾う（UI の表示用）。"""
     lines = [ln for ln in log.splitlines() if ln.strip()]
