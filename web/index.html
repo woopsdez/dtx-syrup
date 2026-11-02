@@ -1,0 +1,636 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>play-dtxmania</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Inter:wght@500;600;700&display=swap">
+<style>
+/* 選曲リスト(左/先) + 1 曲のプレイヤー(右/後)。DTXMania の選曲→演奏画面に寄せた単一ダークテーマ。強調は塗りで、下線は使わない */
+:root{
+  /* 青みのない黒を重ねる（DAW 風）。色はノートに譲り、UI は無彩色 */
+  --bg:#0c0c0d; --panel:#161618; --panel2:#1f1f22; --line:#2a2a2f; --fg:#ececef; --muted:#8e8e96;
+  --accent:#f0f0f3; --accent-ink:#0c0c0d; --good:#5be39a;
+  --hh:#7fd0ff; --sd:#ffd84d; --bd:#b58cff; --ht:#8ef08e; --lt:#ff8a8a;
+  --display:'Inter',system-ui,sans-serif; --body:'Noto Sans JP',system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{margin:0;font-family:var(--body);font-size:14px;line-height:1.5;background:var(--bg);color:var(--fg)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+*{box-sizing:border-box}
+img{max-width:100%}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:.02em}
+.brand .tag{font-family:var(--body);font-size:11px;font-weight:500;color:var(--accent-ink);background:var(--accent);border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:middle}
+.status{font-size:12px;color:var(--muted);text-align:right}
+@media(max-width:599px){.status{display:none}} /* 狭い画面ではヘッダを 1 行に保ち、1 画面目にタブまで収める */
+.main{display:grid;grid-template-columns:1fr;gap:16px;padding-block:12px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.main[data-view="song"] .list{display:none}
+.main[data-view="list"] .song{display:none}
+@media(min-width:960px){
+  .main{grid-template-columns:320px minmax(0,1fr);align-items:start}
+  .main[data-side="narrow"]{grid-template-columns:84px minmax(0,1fr)}
+  .main[data-view] .list,.main[data-view] .song{display:block}
+  .list{position:sticky;top:64px}
+  .back{display:none}
+  .list-head .side{display:grid}
+  /* 畳んだサイドバー: サムネだけの帯。B/E は 6px の点になる。チェックと一括ボタンは隠す */
+  .main[data-side="narrow"] .list-title h2,.main[data-side="narrow"] .sel,.main[data-side="narrow"] #batchBtn{display:none}
+  .main[data-side="narrow"] .list-title{justify-content:center}
+  .main[data-side="narrow"] .row{padding:4px}
+  .main[data-side="narrow"] .open{grid-template-columns:1fr;justify-items:center;gap:4px;padding:0}
+  /* 畳んだ帯ではスクロールバーを出さない（右だけ余白が狭くなり、サムネと » の中心もずれるため）。ホイール・ドラッグで送れる */
+  .main[data-side="narrow"] .songs{max-height:calc(100vh - 120px);scrollbar-width:none}
+  .main[data-side="narrow"] .songs::-webkit-scrollbar{display:none}
+  .main[data-side="narrow"] .meta,.main[data-side="narrow"] .add{display:none}
+}
+.side{display:none;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);place-items:center;color:var(--muted);font-size:11px}
+h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
+.list-head{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.list-title{display:flex;align-items:center;gap:8px}
+.list-title h2{flex:1}
+.btn.wide{width:100%;padding:8px 10px}
+.sel{display:grid;place-items:center;flex:none;padding:4px;cursor:pointer}
+.sel input{width:16px;height:16px;margin:0;accent-color:var(--accent);cursor:pointer}
+.btn{border-radius:8px;padding:9px 14px;background:var(--panel2);border:1px solid var(--line);font-weight:500}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:700}
+.btn.small{padding:5px 9px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.songs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 216px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.songs::-webkit-scrollbar{width:6px}.songs::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}.songs::-webkit-scrollbar-track{background:transparent}
+/* 行 = 畳んだ帯と同じカード（サムネ + 下に B/E の点）。開いたときはその右に曲名が付くだけ */
+.row{display:flex;align-items:center;gap:4px;padding:4px 8px 4px 4px;border-radius:10px;border:1px solid transparent} /* 行に背景は敷かない。黒の上にサムネと文字だけ。選択中は枠線 */
+.open{flex:1;min-width:0;display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:center;text-align:left;padding:0;border-radius:8px}
+.cover{display:flex;flex-direction:column;align-items:center;gap:4px}
+.add{display:flex;gap:6px}
+.add input{flex:1;min-width:0;font:inherit;font-size:12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.add input::placeholder{color:var(--muted)}
+.row[aria-current="true"]{border-color:var(--accent);background:var(--panel2)}
+.thumb{width:64px;height:48px;border-radius:6px;object-fit:cover;background:var(--panel2);display:block}
+.thumb.ph{display:grid;place-items:center;font-family:var(--display);font-size:11px;font-weight:700;color:#0a0d14}
+.meta{min-width:0}
+.meta .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chips{display:flex;gap:5px;justify-content:center}
+.chip{width:7px;height:7px;border-radius:50%;border:1px solid #3c3c43;background:transparent}
+.chip.on{background:var(--good);border-color:transparent}
+.song{min-width:0;max-width:782px;width:100%;justify-self:center} /* 曲名帯からボタンまで全部を同じ幅に。レーンはこの幅いっぱい（5 本で約 156px ずつ） */
+/* 1 画面目 = 曲名 → 再生・タイムライン → 落下ノーツ(残り全部) → BEGINNER/EASY とプリセット。編集向けはその下へスクロール */
+.stage{display:flex;flex-direction:column;gap:10px;min-height:calc(100dvh - 70px - env(safe-area-inset-top,0px))}
+/* 曲名帯と再生段は 1 枚のパネル（枠で分けない）。背景はサムネのぼかし */
+.deck{position:relative;border-radius:12px;overflow:hidden;background:var(--panel2);isolation:isolate}
+.deck .bgimg{position:absolute;inset:-24px;background-size:cover;background-position:center;filter:blur(22px) brightness(.3) saturate(1.1);z-index:-1}
+.head{display:flex;align-items:center;gap:12px;padding:10px 12px 4px}
+.back{flex:none;width:36px;height:36px;border-radius:50%;background:rgba(10,13,20,.55);color:var(--fg);font-size:18px;display:grid;place-items:center}
+.hthumb{flex:none;width:96px;height:72px;border-radius:8px;object-fit:cover;background:var(--panel);display:block;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+.htext{min-width:0;flex:1}
+.htext .title{font-size:18px;font-weight:700;line-height:1.25;text-shadow:0 1px 2px rgba(0,0,0,.6);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.htext .sub{font-size:12px;color:#c9c9cf;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.transport{display:flex;align-items:center;gap:10px;padding:6px 10px 10px}
+.play{width:44px;height:44px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:17px;display:grid;place-items:center;flex:none}
+.play:disabled{background:var(--line);color:var(--muted)}
+.scrub{flex:1;min-width:0;position:relative;height:44px;touch-action:none;cursor:pointer}
+.scrub canvas{display:block;width:100%;height:44px;border-radius:6px}
+.time{font-family:var(--display);font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:none}
+.icon{width:36px;height:36px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);font-size:16px;display:grid;place-items:center;flex:none;opacity:.45}
+.icon[aria-pressed="true"]{opacity:1;border-color:var(--fg)}
+.player{display:flex;flex-direction:column;flex:1;min-height:380px;border-radius:12px;overflow:hidden} /* 枠線なし。レーンの描画だけで区切る */
+#chart{display:block;width:100%;flex:1;min-height:0}
+.ctrl{display:flex;flex-direction:column;gap:8px}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.tabs button{padding:11px;border-radius:10px;font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.06em;color:var(--muted);background:var(--panel);border:1px solid var(--line)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink);border-color:transparent}
+/* 表示の切替はノーツのすぐ上（タイムラインの下）、右端 */
+.toggles{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px 16px;font-size:12px;color:var(--muted);margin-top:-2px}
+.toggles label{display:inline-flex;align-items:center;gap:6px}
+.toggles label[aria-disabled="true"]{opacity:.45}
+@media(min-width:960px){
+  .back{display:none}
+  .hthumb{width:128px;height:96px}
+  .htext .title{font-size:22px}
+}
+details.params{margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+details.params summary{padding:10px 14px;cursor:pointer;color:var(--muted);font-size:13px}
+.groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;padding:0 12px 12px}
+fieldset{margin:0;padding:8px 12px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);min-width:0}
+legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.field{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+.field select{font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;max-width:100%}
+.field.check{flex-direction:row;align-items:center;gap:8px;align-self:end;padding-bottom:6px;color:var(--fg)}
+.stats-cap{font-size:11px;color:var(--muted);padding:0 12px 6px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;padding:0 12px 12px}
+.tile{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:8px 10px;min-width:0}
+.tile b{display:block;font-family:var(--display);font-size:22px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.tile span{font-size:11px;color:var(--muted);display:block}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);opacity:0;transition:.25s;background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:8px;font-size:13px;max-width:calc(100vw - 32px);pointer-events:none;z-index:20}
+.toast.show{opacity:1;transform:translateX(-50%)}
+@media(prefers-reduced-motion:reduce){.toast{transition:none}}
+</style>
+
+<header class="top">
+  <div class="brand">play-dtxmania</div>
+  <div class="status" id="status"></div>
+</header>
+<div class="main" id="main" data-view="list">
+  <section class="list" id="listView">
+    <div class="list-head">
+      <div class="list-title">
+        <label class="sel"><input type="checkbox" id="selAll" aria-label="全曲をチェック / 外す"></label>
+        <h2>Song list</h2>
+        <button class="side" id="sideBtn" aria-label="サイドバーを畳む" title="サイドバーを畳む">«</button>
+      </div>
+      <button class="btn primary small wide" id="batchBtn"></button>
+      <form class="add" id="addForm"><input type="url" id="ytUrl" placeholder="YouTube の URL を貼って曲を追加" aria-label="YouTube の URL"><button class="btn small" type="submit">作る</button></form>
+    </div>
+    <ul class="songs" id="songs"></ul>
+  </section>
+  <section class="song" id="songView">
+    <div class="stage">
+      <div class="deck" id="hero">
+        <div class="bgimg" id="heroBg"></div>
+        <div class="head">
+          <button class="back" id="backBtn" aria-label="曲リストへ戻る">←</button>
+          <img class="hthumb" id="heroImg" alt="">
+          <div class="htext"><div class="title" id="sTitle"></div><div class="sub" id="sSub"></div></div>
+        </div>
+        <div class="transport">
+          <button class="play" id="playBtn" aria-label="再生">▶</button>
+          <div class="scrub" id="scrub"><canvas id="density"></canvas></div>
+          <span class="time" id="time">0:00 / 0:00</span>
+          <button class="icon" id="hitSound" aria-pressed="true" aria-label="ドラム音を鳴らす" title="ドラム音を鳴らす">🥁</button>
+        </div>
+      </div>
+      <div class="toggles">
+        <label><input type="checkbox" id="showRemoved" checked>Master で消えるノートを薄く重ねる</label>
+        <label id="handLabel"><input type="checkbox" id="showHand">DTXCreator で作った既存譜面を白枠で重ねる（ある曲だけ）</label>
+      </div>
+      <div class="player" id="player">
+        <canvas id="chart"></canvas>
+      </div>
+      <div class="ctrl" id="ctrl">
+        <div class="tabs" role="tablist" id="diffTabs">
+          <button role="tab" data-d="beginner">BEGINNER</button>
+          <button role="tab" data-d="easy">EASY</button>
+        </div>
+      </div>
+    </div>
+    <details class="params">
+      <summary>間引きルールを調整（編集したい人向け）</summary>
+      <div class="groups">
+        <fieldset><legend>刻み</legend>
+          <div class="fields">
+            <label class="field">グリッド<select id="pGrid"><option value="4">4 分</option><option value="8">8 分</option><option value="16">16 分</option><option value="32">32 分（そのまま）</option></select></label>
+            <label class="field">同時押しの上限<select id="pChord"><option value="1">1 個</option><option value="2">2 個</option><option value="3">3 個</option></select></label>
+          </div>
+        </fieldset>
+        <fieldset><legend>レーンごとの密度</legend>
+          <div class="fields">
+            <label class="field">ハイハット<select id="pHh"></select></label>
+            <label class="field">スネア<select id="pSd"></select></label>
+            <label class="field">バスドラム<select id="pBd"></select></label>
+            <label class="field check"><input type="checkbox" id="pToms">タムを残す</label>
+          </div>
+        </fieldset>
+        <fieldset><legend>音の強さ</legend>
+          <div class="fields">
+            <label class="field check"><input type="checkbox" id="pGhost">弱い音（ゴースト）を消す</label>
+          </div>
+        </fieldset>
+      </div>
+      <div class="stats-cap">数字で見る</div>
+      <div class="stats" id="stats"></div>
+    </details>
+    <div class="actions" id="actions">
+      <button class="btn primary" id="writeBtn"></button>
+      <button class="btn" id="applyAllBtn"></button>
+    </div>
+    <p class="note">書くと曲フォルダに score_&lt;難易度&gt;.dtx と set.def ができ、DTXMania の次回起動で難易度が増えます。印の無い既存の譜面（手作り・別ツール）は上書きしません。使ったルールは曲ごとに play_dtxmania.json に残ります。</p>
+  </section>
+</div>
+<audio id="audio" preload="metadata"></audio>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+async function api(path, body) { // JSON API（server.py）。失敗はメッセージ付きで投げる
+  const r = await fetch(path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `${r.status} ${r.statusText}`);
+  return j;
+}
+
+// DTX チャンネル → レーン。色は TubeDTX の score.png / DTXMania に合わせる
+const LANES = [
+  { ch: '11', name: 'HH', color: '#7fd0ff' },
+  { ch: '12', name: 'SD', color: '#ffd84d' },
+  { ch: '13', name: 'BD', color: '#b58cff' },
+  { ch: '14', name: 'HT', color: '#8ef08e' },
+  { ch: '15', name: 'LT', color: '#ff8a8a' },
+];
+const LANE_IDX = Object.fromEntries(LANES.map((l, i) => [l.ch, i]));
+// TubeDTX は 1 楽器あたり 4 段階の音量 chip を振る（wav_splits=4）。chip 番号 - 先頭番号 = 音量レベル 0..3
+const CHIP_BASE = { '11': 2, '12': 6, '13': 10, '14': 14, '15': 18, '17': 22, '16': 26 };
+const level = (ch, chip) => parseInt(chip, 36) - (CHIP_BASE[ch] ?? 0);
+const PRIORITY = ['12', '13', '11', '14', '15']; // 同時押しを削るときに残す順
+
+const DENSITY_OPTS = {
+  hh: [['off', '消す'], ['1', '小節頭だけ'], ['2', '2 分'], ['4', '4 分'], ['8', '8 分'], ['16', '16 分'], ['all', 'そのまま']],
+  sd: [['off', '消す'], ['24', '2・4 拍だけ'], ['4', '4 分'], ['8', '8 分'], ['all', 'そのまま']],
+  bd: [['off', '消す'], ['1', '小節頭だけ'], ['2', '2 分'], ['4', '4 分'], ['8', '8 分'], ['all', 'そのまま']],
+};
+let DEFAULTS = { // 難易度ごとの既定ルール。/api/songs の defaults（simplify.py）で上書きされる
+  beginner: { grid: 8, hh: '2', sd: '24', bd: '1', toms: false, ghost: true, chord: 1 },
+  easy: { grid: 16, hh: '8', sd: 'all', bd: '4', toms: true, ghost: true, chord: 2 },
+};
+const FILE = { beginner: 'score_beginner.dtx', easy: 'score_easy.dtx' };
+const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// 曲一覧はサーバーから。title / artist は songs.py が整えたもの（play_dtxmania.json で直せる）
+let songs = [];
+const detail = new Map(); // dir → { master: [[bar,ch,i,n,chip]], hand: { beginner?, easy? } }
+const wrapSong = (s) => ({ ...s, idx: s.i, mt: 240 / (s.bpm || 120), clean: s.title, cleanArtist: s.artist });
+function applySongs(list) {
+  const curDir = songs[cur] && songs[cur].dir;
+  songs = list.map(wrapSong);
+  if (curDir) { const i = songs.findIndex((s) => s.dir === curDir); cur = i < 0 ? 0 : i; }
+  for (const s of songs) if (!(s.dir in checked)) checked[s.dir] = !s.has.beginner || !s.has.easy; // 初期チェック = 難易度が足りない曲
+}
+async function refreshSongs() {
+  const d = await api('/api/songs');
+  if (d.defaults) DEFAULTS = d.defaults;
+  tubedtxInfo = d.tubedtx || null;
+  applySongs(d.songs);
+}
+async function loadDetail(s) {
+  if (!detail.has(s.dir)) detail.set(s.dir, (await api(`/api/song?i=${s.idx}`)).notes);
+  return detail.get(s.dir);
+}
+
+let cur = 0;
+let diff = 'beginner';
+let params = { ...DEFAULTS.beginner };
+let tubedtxInfo = null;
+const checked = {}; // 曲リストのチェック（生成対象）。dir → bool
+const view = { kept: [], removed: [], hand: null, counts: [], masterCounts: [], match: null, stats: null };
+let playing = false, ptr = 0, raf = 0, tNow = 0, t0 = 0, tBase = 0;
+const pads = new Array(LANES.length).fill(-1e9);
+const audio = $('#audio');
+audio.volume = 0.85;
+
+function lowerBound(arr, t) { let lo = 0, hi = arr.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (arr[mid].t <= t) lo = mid + 1; else hi = mid; } return lo; }
+
+// ---- 間引きはサーバー（simplify.py）で行い、結果だけ受け取る。古い応答は捨てる ----
+let buildSeq = 0;
+async function buildView() {
+  const s = songs[cur], mt = s.mt, seq = ++buildSeq;
+  const [notes, r] = await Promise.all([loadDetail(s), api('/api/simplify', { i: s.idx, diff, params })]);
+  if (seq !== buildSeq) return false;
+  view.kept = r.kept.map(([bar, ch, slot, grid, lvl]) => ({ bar, ch, slot, grid, lvl, t: (bar - 1 + slot / grid) * mt, lane: LANE_IDX[ch] })).filter((v) => v.lane != null).sort((a, b) => a.t - b.t);
+  view.removed = r.removed.map(([bar, ch, pos]) => ({ t: (bar - 1 + pos) * mt, lane: LANE_IDX[ch] })).filter((v) => v.lane != null).sort((a, b) => a.t - b.t);
+  const hand = notes.hand && notes.hand[diff];
+  view.hand = hand ? hand.map(([bar, ch, i, n]) => ({ t: (bar - 1 + i / n) * mt, lane: LANE_IDX[ch] })).filter((v) => v.lane != null).sort((a, b) => a.t - b.t) : null;
+  view.masterCounts = r.masterCounts; view.counts = r.counts; view.match = r.match; view.stats = r.stats;
+  ptr = lowerBound(view.kept, curTime());
+  return true;
+}
+
+// ---- 時間 ----
+function curTime() { const s = songs[cur]; return s.audio ? audio.currentTime + s.bgmStart : tNow; }
+function seek(t) {
+  const s = songs[cur];
+  t = Math.max(0, Math.min(s.total, t));
+  if (s.audio && isFinite(audio.duration)) audio.currentTime = Math.max(0, Math.min(audio.duration, t - s.bgmStart));
+  else tNow = t;
+  if (!s.audio) { tBase = tNow; t0 = performance.now(); }
+  ptr = lowerBound(view.kept, curTime());
+  drawAll();
+}
+const fmt = (t) => { t = Math.max(0, t | 0); return `${(t / 60) | 0}:${String(t % 60).padStart(2, '0')}`; };
+function updateTime(t) { $('#time').textContent = `${fmt(t)} / ${fmt(songs[cur].total)}`; }
+
+// ---- 描画 ----
+function setupCanvas(canvas, cssW, cssH) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  if (canvas.width !== Math.round(cssW * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+function line(ctx, x0, y0, x1, y1) { ctx.beginPath(); ctx.moveTo(x0, y0 + .5); ctx.lineTo(x1, y1 + .5); ctx.stroke(); }
+function drawPlayer(t) {
+  const c = $('#chart'), W = c.clientWidth, H = c.clientHeight;
+  if (!W || !H) return;
+  const ctx = setupCanvas(c, W, H);
+  const s = songs[cur], mt = s.mt;
+  // レーンは描画幅いっぱい（幅の上限は .song の max-width が決める）。判定線は下から 16%、1 小節の高さは画面に応じて 120〜260px
+  const laneW = W / LANES.length, X0 = 0, XE = W;
+  const judge = H * 0.88, pxBar = Math.max(120, Math.min(H * 0.42, 260));
+  const y = (tt) => judge - ((tt - t) / mt) * pxBar;
+  ctx.fillStyle = '#0a0a0b'; ctx.fillRect(0, 0, W, H);
+  LANES.forEach((l, i) => { ctx.fillStyle = i % 2 ? '#121214' : '#0e0e10'; ctx.fillRect(X0 + i * laneW, 0, laneW, H); });
+  ctx.lineWidth = 1;
+  const barFrom = Math.max(1, Math.floor(t / mt)), barTo = Math.min(s.maxBar + 1, Math.ceil((t + (judge / pxBar) * mt) / mt) + 1);
+  // 小節番号: 左に余白があれば外側、無ければレーン内の左上に下地を敷いて描く
+  const outside = X0 >= 26;
+  ctx.font = '600 10px Inter, system-ui'; ctx.textBaseline = 'bottom'; ctx.textAlign = outside ? 'right' : 'left';
+  for (let b = barFrom; b <= barTo; b++) {
+    for (let q = 1; q < 4; q++) { const yq = y((b - 1 + q / 4) * mt); ctx.strokeStyle = '#1e1e22'; line(ctx, X0, yq, XE, yq); }
+    const yb = y((b - 1) * mt);
+    ctx.strokeStyle = '#36363d'; line(ctx, X0, yb, XE, yb);
+    if (!outside) { ctx.fillStyle = 'rgba(10,10,11,.85)'; ctx.fillRect(X0, yb - 14, 26, 13); }
+    ctx.fillStyle = '#8e8e96'; ctx.fillText(String(b).padStart(3, '0'), outside ? X0 - 4 : X0 + 3, yb - 2);
+  }
+  ctx.textAlign = 'left';
+  const tMin = t - ((H - judge) / pxBar) * mt, tMax = t + (judge / pxBar) * mt;
+  const noteH = Math.max(8, Math.min(16, laneW * 0.16));
+  const drawSet = (arr, alpha, stroke) => {
+    for (let i = lowerBound(arr, tMin); i < arr.length && arr[i].t <= tMax; i++) {
+      const v = arr[i], x = X0 + v.lane * laneW + 5, w = laneW - 10, yy = y(v.t);
+      ctx.globalAlpha = alpha;
+      if (stroke) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.strokeRect(x - 2.5, yy - noteH / 2 - 2.5, w + 5, noteH + 5); }
+      else { ctx.fillStyle = LANES[v.lane].color; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(x, yy - noteH / 2, w, noteH, 3); else ctx.rect(x, yy - noteH / 2, w, noteH); ctx.fill(); }
+    }
+    ctx.globalAlpha = 1;
+  };
+  if ($('#showRemoved').checked) drawSet(view.removed, .2);
+  drawSet(view.kept, 1);
+  if (view.hand && $('#showHand').checked) drawSet(view.hand, .9, true);
+  const now = performance.now();
+  LANES.forEach((l, i) => {
+    const a = Math.max(0, 1 - (now - pads[i]) / 160);
+    if (a > 0) { ctx.globalAlpha = a * .5; ctx.fillStyle = l.color; ctx.fillRect(X0 + i * laneW + 2, judge - 24, laneW - 4, 48); ctx.globalAlpha = 1; }
+  });
+  ctx.fillStyle = '#f0f0f3'; ctx.shadowColor = '#f0f0f3'; ctx.shadowBlur = 10; ctx.fillRect(X0, judge - 1.5, XE - X0, 3); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#8e8e96'; ctx.font = '700 11px Inter, system-ui'; ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(10,10,11,.8)'; ctx.fillRect(X0, 0, XE - X0, 20); // レーン名は上端。通過するノートの上に下地を敷く
+  ctx.fillStyle = '#8e8e96';
+  LANES.forEach((l, i) => ctx.fillText(l.name, X0 + i * laneW + laneW / 2, 14));
+  ctx.textAlign = 'left';
+}
+function drawScrub(t) {
+  const c = $('#density'), W = c.clientWidth, H = c.clientHeight;
+  if (!W || !H) return;
+  const ctx = setupCanvas(c, W, H);
+  const s = songs[cur], total = s.total, max = Math.max(1, ...view.masterCounts);
+  ctx.fillStyle = '#0a0a0b'; ctx.fillRect(0, 0, W, H);
+  for (let b = 1; b <= s.maxBar; b++) {
+    const x0 = (((b - 1) * s.mt) / total) * W, x1 = ((b * s.mt) / total) * W, w = Math.max(1, x1 - x0 - 1);
+    const hm = (view.masterCounts[b] / max) * (H - 6), hg = (view.counts[b] / max) * (H - 6);
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x0, H - hm, w, hm);
+    ctx.fillStyle = '#a8a8b0'; ctx.fillRect(x0, H - hg, w, hg);
+  }
+  const px = (t / total) * W;
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(px - 1, 0, 2, H);
+}
+function drawAll() { const t = curTime(); drawPlayer(t); drawScrub(t); updateTime(t); }
+
+// ---- ドラム音（WebAudio で簡易合成。本番はチップ音を鳴らしてもよい） ----
+let ac = null, noiseBuf = null;
+function ensureAC() {
+  if (!ac) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  if (ac.state === 'suspended') ac.resume();
+}
+function envTo(node, v, dur, t) { const g = ac.createGain(); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur); node.connect(g); g.connect(ac.destination); }
+function noise(type, freq, v, dur, t) { const src = ac.createBufferSource(); src.buffer = noiseBuf; const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq; src.connect(f); envTo(f, v, dur, t); src.start(t); src.stop(t + dur + .02); }
+function tone(type, f0, f1, v, dur, t) { const o = ac.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur); envTo(o, v, dur, t); o.start(t); o.stop(t + dur + .02); }
+function hit(ch, lvl) {
+  if (!ac || $('#hitSound').getAttribute('aria-pressed') !== 'true') return;
+  const t = ac.currentTime, v = 0.16 + 0.1 * Math.max(0, Math.min(3, lvl ?? 2));
+  if (ch === '13') tone('sine', 150, 45, v * 1.5, .16, t);
+  else if (ch === '12') { noise('bandpass', 1800, v, .14, t); tone('triangle', 200, 120, v * .6, .08, t); }
+  else if (ch === '11') noise('highpass', 8000, v * .5, .05, t);
+  else if (ch === '14') tone('sine', 230, 150, v, .22, t);
+  else if (ch === '15') tone('sine', 170, 100, v, .26, t);
+}
+
+// ---- 再生 ----
+function tick() {
+  if (!playing) return;
+  const s = songs[cur];
+  if (!s.audio) tNow = tBase + (performance.now() - t0) / 1000;
+  const t = curTime();
+  while (ptr < view.kept.length && view.kept[ptr].t <= t) { const v = view.kept[ptr++]; pads[v.lane] = performance.now(); hit(v.ch, v.lvl); }
+  drawPlayer(t); drawScrub(t); updateTime(t);
+  if ((s.audio && audio.ended) || (!s.audio && t >= s.total)) { stop(); return; }
+  raf = requestAnimationFrame(tick);
+}
+async function play() {
+  const s = songs[cur];
+  ensureAC();
+  ptr = lowerBound(view.kept, curTime());
+  playing = true;
+  $('#playBtn').textContent = '❚❚'; $('#playBtn').setAttribute('aria-label', '一時停止');
+  if (s.audio) {
+    try { await audio.play(); } catch (e) { toast('再生できませんでした: ' + e.message); stop(); return; }
+  } else { tBase = tNow; t0 = performance.now(); }
+  cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+function stop() {
+  playing = false;
+  cancelAnimationFrame(raf);
+  if (songs[cur].audio) audio.pause();
+  $('#playBtn').textContent = '▶'; $('#playBtn').setAttribute('aria-label', '再生');
+  drawAll();
+}
+function loadSong() {
+  const s = songs[cur];
+  if (playing) stop();
+  tNow = 0;
+  if (s.audio) { audio.src = s.audio; audio.load(); } else { audio.removeAttribute('src'); }
+}
+audio.addEventListener('loadedmetadata', () => { const s = songs[cur]; if (isFinite(audio.duration)) s.total = Math.max(s.maxBar * s.mt, audio.duration + s.bgmStart); drawAll(); });
+audio.addEventListener('ended', () => { if (playing) stop(); });
+
+// ---- 画面 ----
+function fillSelect(id, opts) { $(id).innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join(''); }
+fillSelect('#pHh', DENSITY_OPTS.hh); fillSelect('#pSd', DENSITY_OPTS.sd); fillSelect('#pBd', DENSITY_OPTS.bd);
+function paramsToControls() {
+  $('#pGrid').value = params.grid; $('#pHh').value = params.hh; $('#pSd').value = params.sd; $('#pBd').value = params.bd;
+  $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost;
+}
+function controlsToParams() {
+  params = { grid: +$('#pGrid').value, hh: $('#pHh').value, sd: $('#pSd').value, bd: $('#pBd').value, chord: +$('#pChord').value, toms: $('#pToms').checked, ghost: $('#pGhost').checked };
+}
+function isGenerated(s, d) { return !!s.has[d]; } // 'auto'（play-dtxmania 製）か 'hand'（手作り・別ツール）
+const checkedSongs = () => songs.filter((s) => checked[s.dir]);
+function renderList() {
+  $('#songs').innerHTML = songs.map((s, i) => `
+    <li class="row" aria-current="${i === cur}">
+      <label class="sel"><input type="checkbox" data-i="${i}" ${checked[s.dir] ? 'checked' : ''} aria-label="${esc(s.clean)} を生成対象にする"></label>
+      <button class="open" data-i="${i}" title="${esc(s.clean)}">
+        <div class="cover">
+          ${s.thumb ? `<img class="thumb" src="${s.thumb}" alt="" loading="lazy">` : `<div class="thumb ph" style="background:hsl(${hue(s.title)} 55% 62%)">${Math.round(s.bpm)} BPM</div>`}
+          <div class="chips">${['beginner', 'easy'].map((d) => `<span class="chip ${isGenerated(s, d) ? 'on' : ''}" title="${d === 'beginner' ? 'Beginner' : 'Easy'} ${isGenerated(s, d) ? 'あり' : 'なし'}"></span>`).join('')}</div>
+        </div>
+        <div class="meta"><div class="t">${esc(s.clean)}</div><div class="s">${esc(s.cleanArtist || '—')} · BPM ${Math.round(s.bpm)}</div></div>
+      </button>
+    </li>`).join('');
+  const missing = songs.filter((s) => !isGenerated(s, 'beginner') || !isGenerated(s, 'easy')).length;
+  const sel = checkedSongs(), files = sel.reduce((a, s) => a + ['beginner', 'easy'].filter((d) => !isGenerated(s, d)).length, 0);
+  $('#status').textContent = `songlist ${songs.length} 曲 / 難易度が足りない曲 ${missing}`;
+  $('#batchBtn').textContent = !sel.length ? '生成する曲をチェックしてください' : files ? `チェックした ${sel.length} 曲を一括生成` : `チェックした ${sel.length} 曲は生成済み`;
+  $('#batchBtn').disabled = !files;
+  $('#applyAllBtn').textContent = sel.length ? `この設定をチェックした ${sel.length} 曲に適用` : 'チェックした曲がありません';
+  $('#applyAllBtn').disabled = !sel.length;
+  const all = $('#selAll'); all.checked = sel.length === songs.length; all.indeterminate = sel.length > 0 && sel.length < songs.length;
+}
+async function renderSong() {
+  const s = songs[cur];
+  const img = $('#heroImg'), bg = $('#heroBg');
+  if (s.thumb) { img.src = s.thumb; img.style.display = ''; bg.style.backgroundImage = `url("${s.thumb}")`; $('#hero').style.background = ''; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; bg.style.backgroundImage = 'none'; $('#hero').style.background = `hsl(${hue(s.title)} 45% 32%)`; }
+  $('#sTitle').textContent = s.clean;
+  $('#sSub').textContent = `${s.cleanArtist || 'アーティスト未設定'} · BPM ${Math.round(s.bpm)} · ${s.maxBar} 小節`;
+  document.querySelectorAll('#diffTabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.d === diff));
+  const st = s.has[diff];
+  $('#writeBtn').textContent = st === 'hand' ? `${FILE[diff]} は手作りなので書きません` : `${st === 'auto' ? 'この設定で書き直す' : 'この設定で書く'}: ${FILE[diff]} と set.def`;
+  $('#writeBtn').disabled = st === 'hand';
+  drawAll();
+  let ok;
+  try { ok = await buildView(); } catch (e) { toast(`間引きに失敗: ${e.message}`); return; }
+  if (!ok) return; // もっと新しい表示要求が走っている
+  const hasHand = !!view.hand;
+  $('#showHand').disabled = !hasHand;
+  $('#handLabel').setAttribute('aria-disabled', !hasHand);
+  const kept = view.kept, st2 = view.stats || { master: s.masterNotes }, m = view.match;
+  const tiles = [
+    [kept.length, 'ノート数'],
+    [st2.master ? Math.round((kept.length / st2.master) * 100) + '%' : '—', `Master ${st2.master} 比`],
+    [Math.max(0, ...view.counts), '最大 / 小節'],
+    [m ? Math.round(m.rate * 100) + '%' : '—', m ? `既存譜面と一致 ${m.inter}/${m.hand}` : '既存譜面なし'],
+  ];
+  $('#stats').innerHTML = tiles.map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join('');
+  drawAll();
+}
+function selectSong(i, open) {
+  if (i !== cur) { cur = i; loadSong(); params = { ...rulesFor(songs[cur], diff) }; paramsToControls(); }
+  if (open) $('#main').dataset.view = 'song';
+  renderList(); renderSong();
+}
+const rulesFor = (s, d) => (s && s.rules && s.rules[d]) || DEFAULTS[d]; // 曲に保存したルール > 既定
+function setDiff(d) {
+  diff = d; params = { ...rulesFor(songs[cur], d) }; paramsToControls(); renderSong(); // タブ = 難易度ごとのルール
+}
+// 題名・アーティストの直し（曲フォルダの play_dtxmania.json に保存し、set.def にも反映）
+async function editTitle() {
+  const s = songs[cur];
+  const title = prompt('曲名（set.def の #TITLE になります）', s.clean);
+  if (title === null) return;
+  const artist = prompt('アーティスト（空でも可）', s.cleanArtist || '');
+  if (artist === null) return;
+  try {
+    const r = await api('/api/settings', { i: s.idx, title, artist });
+    applySongs(r.songs); renderList(); renderSong(); toast('曲名を保存しました');
+  } catch (e) { toast(`保存に失敗: ${e.message}`); }
+}
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); }
+
+$('#songs').addEventListener('click', (e) => { const o = e.target.closest('.open'); if (o) selectSong(+o.dataset.i, true); });
+$('#songs').addEventListener('change', (e) => { const cb = e.target.closest('input[type="checkbox"]'); if (cb) { checked[songs[+cb.dataset.i].dir] = cb.checked; renderList(); } });
+$('#selAll').addEventListener('change', (e) => { songs.forEach((s) => { checked[s.dir] = e.target.checked; }); renderList(); });
+// TubeDTX を裏で回す（download → separate → MIDI → score.dtx → Beginner / Easy）。進み具合は #status に出す
+let jobTimer = 0;
+async function pollJobs() {
+  try {
+    const { jobs } = await api('/api/jobs');
+    const active = jobs.filter((j) => j.state === 'queued' || j.state === 'running');
+    const lastLine = (j) => (j.log || '').trim().split('\n').filter(Boolean).pop() || '';
+    if (active.length) {
+      $('#status').textContent = `TubeDTX 実行中 ${active.length} 件: ${lastLine(active[0]).slice(0, 60)}`;
+      jobTimer = setTimeout(pollJobs, 2000);
+    } else {
+      const done = jobs.filter((j) => j.finished && !j.seen);
+      for (const j of done) { j.seen = true; toast(j.state === 'done' ? `${j.dir} を作りました（Master / Beginner / Easy）` : `TubeDTX が失敗しました: ${lastLine(j).slice(0, 80)}`); }
+      jobTimer = 0;
+      await refreshSongs(); renderList();
+    }
+  } catch (e) { jobTimer = setTimeout(pollJobs, 5000); }
+}
+$('#addForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const url = $('#ytUrl').value.trim(); if (!url) return;
+  if (tubedtxInfo && !tubedtxInfo.ok) { toast(`TubeDTX が見つかりません: ${tubedtxInfo.dir}`); return; }
+  try { await api('/api/add', { url }); $('#ytUrl').value = ''; toast('TubeDTX を開始しました。分離に数分かかります'); if (!jobTimer) pollJobs(); }
+  catch (err) { toast(`開始できません: ${err.message}`); }
+});
+$('#backBtn').addEventListener('click', () => { $('#main').dataset.view = 'list'; });
+const setSide = (narrow) => {
+  $('#main').dataset.side = narrow ? 'narrow' : 'wide';
+  const b = $('#sideBtn'); b.textContent = narrow ? '»' : '«'; // 再生ボタンの ▶ と紛れないよう三角は使わない
+  b.title = narrow ? 'サイドバーを広げる' : 'サイドバーを畳む'; b.setAttribute('aria-label', b.title);
+  try { localStorage.setItem('pd.side', narrow ? '1' : '0'); } catch (e) { /* 保存できない環境でも動く */ }
+};
+$('#sideBtn').addEventListener('click', () => setSide($('#main').dataset.side !== 'narrow'));
+try { setSide(localStorage.getItem('pd.side') === '1'); } catch (e) { setSide(false); }
+$('#diffTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setDiff(b.dataset.d); });
+document.querySelectorAll('.params select, .params input').forEach((el) => el.addEventListener('change', () => { controlsToParams(); renderSong(); }));
+$('#showRemoved').addEventListener('change', drawAll);
+$('#showHand').addEventListener('change', drawAll);
+$('#playBtn').addEventListener('click', () => (playing ? stop() : play()));
+$('#hitSound').addEventListener('click', (e) => { const b = e.currentTarget; b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true'); });
+const scrub = $('#scrub');
+let scrubbing = false;
+const seekFromEvent = (e) => { const r = scrub.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * songs[cur].total); };
+scrub.addEventListener('pointerdown', (e) => { scrubbing = true; scrub.setPointerCapture(e.pointerId); seekFromEvent(e); });
+scrub.addEventListener('pointermove', (e) => { if (scrubbing) seekFromEvent(e); });
+scrub.addEventListener('pointerup', () => { scrubbing = false; });
+scrub.addEventListener('pointercancel', () => { scrubbing = false; });
+$('#sTitle').addEventListener('click', editTitle);
+$('#sTitle').title = 'クリックで曲名・アーティストを直す';
+function describe(results) { // batch の結果を 1 行に
+  const ok = results.filter((r) => r.ok).length, hand = results.filter((r) => r.skipped === 'hand').length;
+  return `${ok} ファイル書きました` + (hand ? `（手作りの ${hand} ファイルは残しました）` : '');
+}
+$('#writeBtn').addEventListener('click', async () => {
+  const s = songs[cur];
+  try {
+    const r = await api('/api/write', { i: s.idx, diff, params });
+    applySongs(r.songs); renderList(); renderSong();
+    toast(r.ok ? `${FILE[diff]} と set.def を書きました。DTXMania の次回起動で出ます` : r.message);
+  } catch (e) { toast(`書けませんでした: ${e.message}`); }
+});
+$('#applyAllBtn').addEventListener('click', async () => {
+  const items = checkedSongs().map((s) => s.idx);
+  try {
+    const r = await api('/api/batch', { items, diffs: [diff], params });
+    applySongs(r.songs); renderList(); renderSong();
+    toast(`チェックした ${items.length} 曲の ${diff} に今の設定: ${describe(r.results)}`);
+  } catch (e) { toast(`書けませんでした: ${e.message}`); }
+});
+$('#batchBtn').addEventListener('click', async () => {
+  const items = checkedSongs().map((s) => s.idx);
+  try {
+    const r = await api('/api/batch', { items, diffs: ['beginner', 'easy'] });
+    applySongs(r.songs); renderList(); renderSong();
+    toast(`チェックした ${items.length} 曲: ${describe(r.results)}`);
+  } catch (e) { toast(`書けませんでした: ${e.message}`); }
+});
+if (window.ResizeObserver) new ResizeObserver(() => drawAll()).observe($('#player'));
+else window.addEventListener('resize', drawAll);
+
+(async function boot() {
+  try { await refreshSongs(); } catch (e) { $('#status').textContent = `読み込めません: ${e.message}`; return; }
+  if (!songs.length) { $('#status').textContent = 'songlist に TubeDTX 製の曲がありません'; return; }
+  params = { ...rulesFor(songs[cur], diff) }; paramsToControls();
+  loadSong();
+  renderList();
+  renderSong();
+  pollJobs();
+})();
+</script>
