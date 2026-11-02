@@ -216,9 +216,11 @@ class Handler(BaseHTTPRequestHandler):
                 self.state.rescan()
                 return self.send_json({'songs': self.state.summaries()})
             if u.path == '/api/add':
-                url = (body.get('url') or '').strip()
+                url = tubedtx.clean_url(body.get('url'))
                 if not url:
                     return self.send_json({'error': 'URL がありません'}, 400)
+                if not tubedtx.available()['ok']:
+                    return self.send_json({'error': f"TubeDTX が見つかりません: {tubedtx.TUBEDTX_DIR}"}, 400)
                 return self.send_json({'job': self.state.jobs.start(url)})
             return self.send_json({'error': 'not found'}, 404)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):

@@ -25,10 +25,18 @@ def main() -> int:
         print('RESULT=fail', flush=True)
         return 1
 
-    out = g.new_score_gr(url)          # [log, project_path, preimage, *config]
-    project_path = out[1]
+    try:
+        out = g.new_score_gr(url)      # [log, project_path, preimage, *config]
+        project_path = out[1]
+        print(out[0], flush=True)
+    except Exception as e:  # noqa: BLE001
+        msg = str(e)
+        if 'すでに同名ディレクトリ' not in msg:
+            raise
+        # 前回途中で止まった曲フォルダがある → それを使って続きから（済んだ工程は batch_skip_converted で飛ぶ）
+        project_path = msg.split('。', 1)[1].strip()
+        print(f'前回のフォルダを使って続きから進めます: {project_path}', flush=True)
     print(f'PROJECT_PATH={project_path}', flush=True)
-    print(out[0], flush=True)
 
     res = g._batch_convert_gr(mp.Lock(), project_path)  # noqa: SLF001 - download → separate → midi → dtx
     print(res[0], flush=True)

@@ -54,7 +54,7 @@ def cmd_add(root: Path, url: str, dry_run: bool) -> int:
     if not info['ok']:
         print('TubeDTX が見つかりません:', info)
         return 1
-    r = tubedtx.run(url, on_line=print, dry_run=dry_run)
+    r = tubedtx.run(tubedtx.clean_url(url), on_line=print, dry_run=dry_run)
     if not r['ok']:
         print('TubeDTX が失敗しました')
         return 1

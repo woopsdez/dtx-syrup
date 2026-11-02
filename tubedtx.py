@@ -7,15 +7,74 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import threading
 import time
 import uuid
 from pathlib import Path
+from urllib.parse import parse_qsl, urlparse
 
 TUBEDTX_DIR = Path(os.environ.get('TUBEDTX_DIR', r'C:\tools\TubeDTX'))
 VENV_PYTHON = TUBEDTX_DIR / 'venv' / 'Scripts' / 'python.exe'
 DRIVER = Path(__file__).with_name('tubedtx_driver.py')
+
+# ログの行 → 今どの段階か。TubeDTX の debug_args が関数呼び出しを 1 行ずつ出すのを利用する
+PHASES = [
+    ('new_score_gr(', '動画の情報を取得中'),
+    ('PROJECT_PATH=', '曲フォルダを用意'),
+    ('download_video_gr(', '動画をダウンロード中'),
+    ('convert_video_gr(', '音声に変換中'),
+    ('create_preview_gr(', 'プレビュー音源を作成中'),
+    ('separate_music_gr(', 'ドラムを分離中（数分かかります）'),
+    ('convert_to_midi_gr(', 'MIDI に変換中'),
+    ('midi_to_dtx_gr(', 'DTX を書き出し中'),
+    ('beginner:', 'Beginner / Easy を生成中'),
+]
+HINTS = [
+    ('HTTP Error 403', 'YouTube に拒否されました（403）。TubeDTX の yt-dlp が古いときに起きます。venv で yt-dlp を更新すると直ります'),
+    ('Sign in to confirm', 'YouTube がボット判定しています。しばらく待つか yt-dlp を更新してください'),
+    ('すでに同名ディレクトリ', '同じ曲のフォルダが既にあります'),
+]
+
+
+def clean_url(url: str) -> str:
+    """YouTube の URL を watch?v=ID だけにする（list / start_radio / si / t を落とす）。youtu.be や shorts も直す。"""
+    url = (url or '').strip()
+    pr = urlparse(url)
+    host = (pr.netloc or '').lower()
+    parts = [p for p in pr.path.split('/') if p]
+    if host.endswith('youtu.be') and parts:
+        return f'https://www.youtube.com/watch?v={parts[0]}'
+    if 'youtube.com' in host:
+        if len(parts) >= 2 and parts[0] in ('shorts', 'live', 'embed'):
+            return f'https://www.youtube.com/watch?v={parts[1]}'
+        vid = dict(parse_qsl(pr.query)).get('v')
+        if vid:
+            return f'https://www.youtube.com/watch?v={vid}'
+    return url
+
+
+def describe(log: str, state: str) -> dict:
+    """ジョブのログから、段階・失敗の要点・直し方のヒントを拾う（UI の表示用）。"""
+    lines = [ln for ln in log.splitlines() if ln.strip()]
+    phase = ''
+    for ln in lines:
+        for key, name in PHASES:
+            if key in ln:
+                phase = name
+    error = ''
+    if state == 'failed':
+        for ln in reversed(lines):
+            if ln.startswith('RESULT=') or ln.startswith('  File') or ln.startswith('Traceback'):
+                continue
+            if re.search(r'Error|Exception|失敗|エラー|ありません', ln):
+                error = ln.strip()[:200]
+                break
+        if not error and lines:
+            error = lines[-1].strip()[:200]
+    hint = next((h for key, h in HINTS if key in log), '')
+    return {'phase': phase, 'error': error, 'hint': hint}
 
 
 def available() -> dict:
@@ -71,9 +130,14 @@ class Jobs:
 
     def list(self) -> list[dict]:
         with self.lock:
-            return [dict(j, log=j['log'][-4000:]) for j in self.items]
+            return [dict(j, log=j['log'][-4000:], **describe(j['log'], j['state'])) for j in self.items]
 
     def start(self, url: str) -> dict:
+        url = clean_url(url)
+        with self.lock:
+            for j in self.items:  # 同じ URL が動いていれば二重に始めない
+                if j['url'] == url and j['state'] in ('queued', 'running'):
+                    return dict(j)
         job = {'id': uuid.uuid4().hex[:8], 'url': url, 'state': 'queued', 'log': '', 'dir': None,
                'started': time.time(), 'finished': None}
         with self.lock:
