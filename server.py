@@ -64,6 +64,13 @@ class Handler(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
     # ---- 共通 ----
+    def handle(self):
+        """ブラウザが keep-alive の接続を途中で切るのは普通のこと。コンソールに例外を吐かない。"""
+        try:
+            super().handle()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass
+
     def log_message(self, fmt, *args):  # noqa: D401 - 静かに。エラーだけ出す
         if args and str(args[1:2]).startswith("('5"):
             super().log_message(fmt, *args)
