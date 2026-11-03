@@ -155,6 +155,17 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .job .err{color:#ff9d9d;word-break:break-all}
 .job .hint{color:var(--muted)}
 .job details{font-size:11px;color:var(--muted)}
+.job .pct{flex:none;font-variant-numeric:tabular-nums;color:var(--fg)}
+.bar.det i{animation:none;width:0;transition:width .8s ease}
+.pl{border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:12px;display:flex;flex-direction:column;gap:6px}
+.pl summary{cursor:pointer;color:var(--muted)}
+.pl form{display:flex;gap:6px;flex-wrap:wrap}
+.pl input{flex:1;min-width:0;font:inherit;color:var(--fg);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+.pl input.box{flex:0 1 110px}
+.pl ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.pl li{display:flex;align-items:center;gap:6px;min-width:0}
+.pl li .u{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl li .m{color:var(--muted);flex:none}
 .job pre{margin:4px 0 0;max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-all;font-size:10px;color:var(--muted)}
 .bar{height:3px;border-radius:2px;background:var(--line);overflow:hidden}
 .bar i{display:block;height:100%;width:40%;background:var(--fg);animation:slide 1.3s linear infinite}
@@ -264,6 +275,11 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
       <button class="mback" id="makeBack" aria-label="戻る" title="戻る">←</button>
       <form class="add" id="addForm"><input type="text" id="ytUrl" autocomplete="off" placeholder="曲名で YouTube を検索、または URL を貼る" aria-label="曲名か YouTube の URL"><button class="btn small" type="submit" id="addBtn">検索</button></form>
     </div>
+    <details class="pl" id="plPanel">
+      <summary>再生リストを見張る（子どもが足した曲を自動で譜面に）</summary>
+      <form id="plForm"><input type="text" id="plUrl" autocomplete="off" placeholder="YouTube の再生リストの URL（公開か限定公開）" aria-label="再生リストの URL"><input type="text" class="box" id="plBox" autocomplete="off" placeholder="入れる箱（例: こども）" aria-label="入れる箱"><button class="btn small" type="submit">見張る</button></form>
+      <ul id="plList"></ul>
+    </details>
     <div class="jobs" id="jobs" hidden aria-live="polite"></div>
     <div class="make-body">
       <div class="results" id="results" hidden></div>
@@ -880,16 +896,29 @@ function renderJobs(jobs) {
   const show = jobs.filter((j) => !dismissedJobs.has(j.id)).slice(-3);
   el.hidden = !show.length;
   el.innerHTML = show.map((j) => {
-    const title = isActive(j) ? (j.phase || '準備中') : j.state === 'done' ? `${j.dir} を作りました` : `失敗: ${j.phase || '開始できませんでした'}`;
+    const name = j.song || j.title || '';
+    const title = isActive(j) ? `${j.state === 'queued' ? '順番待ち' : (j.phase || '準備中')}${name ? `: ${name}` : ''}` : j.state === 'done' ? `${name || j.dir} を作りました` : `失敗: ${j.phase || '開始できませんでした'}`;
     const log = (j.log || '').trim().split('\n').slice(-30).join('\n');
     return `<div class="job" data-state="${j.state}">
-      <div class="job-h"><span>${isActive(j) ? '⏳' : j.state === 'done' ? '✓' : '✗'}</span><span class="t" title="${esc(j.url)}">${esc(title)}</span>${isActive(j) ? '' : `<button class="x" data-id="${j.id}" aria-label="閉じる">×</button>`}</div>
-      ${isActive(j) ? '<div class="bar"><i></i></div>' : ''}
+      <div class="job-h"><span>${isActive(j) ? '⏳' : j.state === 'done' ? '✓' : '✗'}</span><span class="t" title="${esc(j.url)}">${esc(title)}</span>${isActive(j) ? `<span class="pct">${j.percent || 0}%</span>` : ''}${isActive(j) ? '' : `<button class="x" data-id="${j.id}" aria-label="閉じる">×</button>`}</div>
+      ${isActive(j) ? `<div class="bar det"><i style="width:${j.percent || 0}%"></i></div>` : ''}
       ${j.error ? `<div class="err">${esc(j.error)}</div>` : ''}
       ${j.hint ? `<div class="hint">${esc(j.hint)}</div>` : ''}
-      <details><summary>ログ</summary><pre>${esc(log)}</pre></details>
+      <details data-id="${j.id}" ${openLogs.has(j.id) ? 'open' : ''}><summary>ログ</summary><pre>${esc(log)}</pre></details>
     </div>`;
   }).join('');
+  el.querySelectorAll('details[open] pre').forEach((pre) => { pre.scrollTop = pre.scrollHeight; });
+}
+const openLogs = new Set(); // 開いたログは描き直しても開いたまま
+$('#jobs').addEventListener('toggle', (e) => { const d = e.target; if (d.dataset && d.dataset.id) d.open ? openLogs.add(d.dataset.id) : openLogs.delete(d.dataset.id); }, true);
+function chime(ok) { // できたら「ポロン」、失敗は低い音 1 つ
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext, c = new AC(), t0 = c.currentTime;
+    (ok ? [659, 880, 1319] : [220]).forEach((f, i) => { const o = c.createOscillator(), g = c.createGain(); o.frequency.value = f; o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, t0 + i * .12); g.gain.exponentialRampToValueAtTime(.25, t0 + i * .12 + .02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + i * .12 + .6);
+      o.connect(g).connect(c.destination); o.start(t0 + i * .12); o.stop(t0 + i * .12 + .65); });
+    setTimeout(() => c.close(), 1500);
+  } catch (e) { /* 音が出せない環境 */ }
 }
 async function pollJobs(silent) {
   clearTimeout(jobTimer); jobTimer = 0;
@@ -898,9 +927,10 @@ async function pollJobs(silent) {
     renderJobs(jobs); renderJobsMini(jobs);
     const finished = jobs.filter((j) => j.finished && !seenJobs.has(j.id));
     finished.forEach((j) => seenJobs.add(j.id));
+    if (!silent && finished.length) chime(finished.some((j) => j.state === 'done'));
     if (!silent) for (const j of finished) toast(j.state === 'done' ? `${j.dir} を作りました（Master / Beginner / Easy）` : `TubeDTX が失敗しました。曲リストの上に理由を出しています`);
     if (finished.some((j) => j.state === 'done')) { await refreshSongs(); renderList(); }
-    if (jobs.some(isActive)) jobTimer = setTimeout(pollJobs, 2000);
+    jobTimer = setTimeout(pollJobs, jobs.some(isActive) ? 2000 : 10000); // 再生リストから自動で始まるジョブにも気づけるよう、止めずに見張る
   } catch (e) { jobTimer = setTimeout(pollJobs, 5000); }
 }
 $('#jobs').addEventListener('click', (e) => { const b = e.target.closest('.x'); if (b) { dismissedJobs.add(b.dataset.id); pollJobs(true); } });
@@ -946,7 +976,34 @@ $('.make-body').addEventListener('click', async (e) => { // 結果と小窓の�
   b.disabled = true;
   if (await startAdd(b.dataset.url)) { closePreview(); $('#ytUrl').value = ''; $('#addBtn').textContent = '検索'; } else b.disabled = false;
 });
-function openMake() { $('#main').dataset.view = 'make'; setTimeout(() => $('#ytUrl').focus(), 50); }
+// ---- 再生リストの見張り ----
+async function loadPlaylists(r) {
+  try {
+    const d = r || await api('/api/playlists');
+    const last = d.last || {};
+    $('#plList').innerHTML = d.playlists.length ? d.playlists.map((pl) => {
+      const l = last[pl.url];
+      const m = !l ? 'まだ確認していません' : l.error ? `確認失敗: ${l.error}` : `${l.at} に確認・${l.count} 曲${l.started.length ? `・${l.started.length} 曲を作り始めた` : ''}`;
+      return `<li><span class="u" title="${esc(pl.url)}">${esc(pl.url.replace('https://www.youtube.com/playlist?list=', 'list='))}${pl.box ? ` → 箱「${esc(pl.box)}」` : ''}</span><span class="m">${esc(m)}</span>
+        <button class="btn small" data-sync>今すぐ確認</button><button class="x" data-rm="${esc(pl.url)}" aria-label="見張りをやめる">×</button></li>`;
+    }).join('') : `<li class="m">登録なし。家族の YouTube アカウントで再生リストを作り「公開」か「限定公開」にして URL を貼ってください。${d.interval} 分ごとに確認します</li>`;
+    if (d.playlists.length) $('#plPanel').open = true;
+  } catch (e) { $('#plList').innerHTML = `<li class="m">${esc(e.message)}</li>`; }
+}
+$('#plForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { await loadPlaylists(await api('/api/playlists', { url: $('#plUrl').value, box: $('#plBox').value })); $('#plUrl').value = ''; toast('見張りを始めました。新しい曲があれば作り始めます'); setTimeout(() => { loadPlaylists(); pollJobs(); }, 8000); }
+  catch (err) { toast(err.message); }
+});
+$('#plList').addEventListener('click', async (e) => {
+  const rm = e.target.closest('[data-rm]'), sync = e.target.closest('[data-sync]');
+  try {
+    if (rm) await loadPlaylists(await api('/api/playlists', { remove: rm.dataset.rm }));
+    if (sync) { sync.disabled = true; sync.textContent = '確認中…'; const r = await api('/api/playlists/sync', {}); await loadPlaylists(); pollJobs();
+      const n = r.playlists.reduce((a, p) => a + p.started.length, 0); toast(n ? `${n} 曲を作り始めました` : '新しい曲はありませんでした'); }
+  } catch (err) { toast(err.message); loadPlaylists(); }
+});
+function openMake() { loadPlaylists(); $('#main').dataset.view = 'make'; setTimeout(() => $('#ytUrl').focus(), 50); }
 function closeMake() { closePreview(); $('#main').dataset.view = window.innerWidth >= 960 ? 'song' : 'list'; }
 $('#makeBtn').addEventListener('click', openMake);
 $('#jobsMini').addEventListener('click', openMake);
@@ -954,7 +1011,7 @@ $('#makeBack').addEventListener('click', closeMake);
 function renderJobsMini(jobs) { // 曲リスト側の 1 行: 動いている間と、失敗を消すまで
   const el = $('#jobsMini');
   const active = jobs.filter(isActive), failed = jobs.filter((j) => j.state === 'failed' && !dismissedJobs.has(j.id));
-  if (active.length) { el.hidden = false; el.textContent = `⏳ ${active[0].phase || '準備中'}`; }
+  if (active.length) { el.hidden = false; el.textContent = `⏳ ${active[0].percent || 0}% ${active[0].phase || '準備中'}${active.length > 1 ? `（ほか ${active.length - 1} 曲待ち）` : ''}`; }
   else if (failed.length) { el.hidden = false; el.textContent = '✗ TubeDTX が失敗しました（押して確認）'; }
   else el.hidden = true;
 }

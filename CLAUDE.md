@@ -24,6 +24,9 @@ DTXMania で遊ぶための道具。(1) 楽曲追加（YouTube → TubeDTX → �
   （= `DTXFiles.★お気に入り` へ移し、元の箱は `dtx_syrup.json` の `box` に控える。`shutil.move`、dtxmania.exe 起動中は拒否）
 - `server.py` API と配信（音源は Range 対応）。`web/index.html` が UI（1 ファイル）
 - `tubedtx.py` URL → TubeDTX 一括変換 → Beginner / Easy
+- `playlist.py` YouTube の再生リストを見張り（既定 15 分ごと）、songlist に無い動画だけ TubeDTX のジョブへ → 指定の箱へ移す。
+  設定は `dtx_syrup.local.json`（.gitignore 済み）。`notify.py` 完了・失敗を Windows の通知で（PowerShell の WinRT）。
+  ジョブの % は `tubedtx.progress`（段階の位置 + 経過時間。ドラム分離は demucs の % 表示）
 - `audio.py` bgm.ogg の長さ（Ogg のページを読む）。DTXMania は最後のチップで結果画面へ移るので、書くときは音源の終わりに無音チップ
   （曲フォルダの silence.wav、#WAVZZ、ch 61）を置いて歌が終わるまで演奏を続ける
 - 背景動画: DTXMania 4.15.1 の設定は「全画面 / 中央寄せ」の 2 択でオフが無い（動画のデコードが重い）。外したい曲だけ書く譜面から `#AVI` と ch 54 / 5A を外せる（params `movie`、既定 True = 入れる。本人は演奏中の動画は残したい）

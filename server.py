@@ -12,6 +12,9 @@ GET  /api/jobs         実行中・終了した add の状態
 GET  /api/boxes        箱（DTXFiles.*）の一覧と曲数
 POST /api/move         {items:[i], box} → チェックした曲のフォルダを箱へ移す（'' = songlist 直下）
 POST /api/favorite     {i, on} → ★（DTXFiles.★お気に入り へ移す / 元の箱へ戻す）
+GET  /api/playlists   見張る再生リストと直近の確認結果
+POST /api/playlists   {url, box} 追加 / {remove: url} 削除 / {interval} 確認の間隔（分）
+POST /api/playlists/sync  今すぐ確認して、新しい動画をジョブに入れる
 GET  /media/N/name     曲フォルダの画像・音源（pre.jpg, bgm.ogg など。Range 対応）
 DTXMania が起動中のときは move / favorite を 409 で断る。
 """
@@ -26,6 +29,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 import boxes
+import playlist
 import records
 import simplify
 import songs as songs_mod
@@ -42,8 +46,10 @@ class State:
         self.jobs = tubedtx.Jobs(self)
         self.rescan()
         self.records = records.Watcher(self)
+        self.playlists = playlist.Syncer(self)
         if watch_records:
-            self.records.start()   # DTXMania が結果を書いたら曲ごとの履歴に写す
+            self.records.start()
+            self.playlists.start()   # 再生リストを定期的に確かめて、新しい動画を譜面にする   # DTXMania が結果を書いたら曲ごとの履歴に写す
 
     def rescan(self) -> list[songs_mod.Song]:
         found = songs_mod.scan(self.root)
@@ -172,6 +178,10 @@ class Handler(BaseHTTPRequestHandler):
                     'master': [n.as_list() for n in s.master.notes],
                     'hand': {d: [n.as_list() for n in c.notes] for d, c in s.hand_variants().items()},
                 }, 'plays': s.settings.get('plays', {})})
+            if u.path == '/api/playlists':
+                cfg = playlist.load_config(self.state.playlists.path)
+                return self.send_json({'playlists': cfg['playlists'], 'interval': cfg['interval'],
+                                       'last': self.state.playlists.last})
             if u.path == '/api/jobs':
                 return self.send_json({'jobs': self.state.jobs.list()})
             if u.path == '/api/search':
@@ -286,6 +296,28 @@ class Handler(BaseHTTPRequestHandler):
                     songs_mod.write_setdef(s)
                 self.state.rescan()
                 return self.send_json(self.state.listing())
+            if u.path == '/api/playlists':
+                syncer = self.state.playlists
+                with syncer.lock:
+                    cfg = playlist.load_config(syncer.path)
+                    if body.get('remove'):
+                        cfg['playlists'] = [pl for pl in cfg['playlists'] if pl['url'] != body['remove']]
+                    if body.get('url'):
+                        url = playlist.playlist_url(body['url'])
+                        if not url:
+                            return self.send_json({'error': '再生リストの URL ではありません（list= が入った URL を貼ってください）'}, 400)
+                        cfg['playlists'] = [pl for pl in cfg['playlists'] if pl['url'] != url]
+                        cfg['playlists'].append({'url': url, 'box': (body.get('box') or '').strip()})
+                    if body.get('interval'):
+                        cfg['interval'] = max(1, int(body['interval']))
+                    playlist.save_config(cfg, syncer.path)
+                if body.get('url'):
+                    syncer.wake.set()   # 足したらすぐ確認
+                return self.send_json({'playlists': cfg['playlists'], 'interval': cfg['interval'], 'last': syncer.last})
+            if u.path == '/api/playlists/sync':
+                if not tubedtx.available()['ok']:
+                    return self.send_json({'error': f'TubeDTX が見つかりません: {tubedtx.TUBEDTX_DIR}'}, 400)
+                return self.send_json(self.state.playlists.sync())
             if u.path == '/api/add':
                 url = tubedtx.clean_url(body.get('url'))
                 if not url:

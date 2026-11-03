@@ -31,6 +31,34 @@ PHASES = [
     ('midi_to_dtx_gr(', 'DTX を書き出し中'),
     ('beginner:', 'Beginner / Easy を生成中'),
 ]
+# 進み具合（%）: 段階ごとの開始位置と、ふつうにかかる秒数（実測: URL → 3 難易度で約 4 分、うちドラム分離が大半）
+PHASE_PROGRESS = [(0, 5), (2, 3), (4, 25), (12, 10), (16, 6), (20, 150), (80, 25), (90, 8), (96, 6)]
+_TQDM = re.compile(r'(\d{1,3})%\|')
+
+
+def progress(log: str, state: str, phase_i: int | None, phase_at: float | None, now: float | None = None) -> int:
+    """0〜100。段階の位置 + 段階内は経過時間（ドラム分離は demucs の % 表示があればそれ）で埋める。"""
+    if state == 'done':
+        return 100
+    if phase_i is None or phase_i < 0:
+        return 0
+    start, expect = PHASE_PROGRESS[phase_i]
+    end = PHASE_PROGRESS[phase_i + 1][0] if phase_i + 1 < len(PHASE_PROGRESS) else 99
+    frac = min(0.95, max(0.0, ((now or time.time()) - (phase_at or time.time())) / expect))
+    if PHASES[phase_i][0] == 'separate_music_gr(':
+        seen = _TQDM.findall(log[log.rfind('separate_music_gr('):])
+        if seen:
+            frac = min(1.0, int(seen[-1]) / 100)
+    return int(start + (end - start) * frac)
+
+
+def phase_index(line: str) -> int | None:
+    for i, (key, _name) in enumerate(PHASES):
+        if key in line:
+            return i
+    return None
+
+
 HINTS = [
     ('HTTP Error 403', 'YouTube に拒否されました（403）。TubeDTX の yt-dlp が古いときに起きます。venv で yt-dlp を更新すると直ります'),
     ('Sign in to confirm', 'YouTube がボット判定しています。しばらく待つか yt-dlp を更新してください'),
@@ -178,16 +206,19 @@ class Jobs:
 
     def list(self) -> list[dict]:
         with self.lock:
-            return [dict(j, log=j['log'][-4000:], **describe(j['log'], j['state'])) for j in self.items]
+            return [dict(j, log=j['log'][-4000:], **describe(j['log'], j['state']),
+                         percent=progress(j['log'], j['state'], j.get('phase_i'), j.get('phase_at')))
+                    for j in self.items]
 
-    def start(self, url: str) -> dict:
+    def start(self, url: str, box: str | None = None, title: str = '', source: str = 'manual') -> dict:
+        """box: できた曲を移す箱（DTXFiles.<box>）。source: 'manual'（UI / CLI）か 'playlist'（再生リストの見張り）。"""
         url = clean_url(url)
         with self.lock:
             for j in self.items:  # 同じ URL が動いていれば二重に始めない
                 if j['url'] == url and j['state'] in ('queued', 'running'):
                     return dict(j)
         job = {'id': uuid.uuid4().hex[:8], 'url': url, 'state': 'queued', 'log': '', 'dir': None,
-               'started': time.time(), 'finished': None}
+               'started': time.time(), 'finished': None, 'box': box, 'title': title, 'source': source}
         with self.lock:
             self.items.append(job)
             if self.worker is None or not self.worker.is_alive():
@@ -211,12 +242,30 @@ class Jobs:
                 job['state'] = 'failed'
                 job['log'] += f'\n{e}'
             job['finished'] = time.time()
+            self._finished(job)
+
+    def _finished(self, job: dict) -> None:
+        """できた / 失敗したことを Windows の通知で知らせる（ブラウザを開いていなくても気づける）。"""
+        import notify
+        name = job.get('song') or job.get('title') or job.get('dir') or job['url']
+        if job['state'] == 'done':
+            where = f"（箱: {job['box']}）" if job.get('moved') else ''
+            notify.toast('DTX Syrup: 譜面ができました', f'{name}{where} — DTXMania を起動し直すと選べます')
+            return
+        notify.toast('DTX Syrup: 譜面を作れませんでした',
+                     f"{name} — {describe(job['log'], 'failed').get('error') or '詳しくは画面のログで'}")
+        syncer = getattr(self.state, 'playlists', None)
+        if syncer is not None and job.get('source') == 'playlist':
+            syncer.record_failure(job['url'])
 
     def _run(self, job: dict) -> None:
         import songs as songs_mod  # 循環 import を避ける
 
         def on_line(line):
             job['log'] += line + '\n'
+            i = phase_index(line)
+            if i is not None and i != job.get('phase_i'):
+                job['phase_i'], job['phase_at'] = i, time.time()
 
         r = run(job['url'], on_line)
         if not r['ok'] or not r['project_path']:
@@ -230,8 +279,18 @@ class Jobs:
             job['state'] = 'failed'
             job['log'] += '\nscore.dtx が見つかりません'
             return
+        job['phase_i'], job['phase_at'] = len(PHASES) - 1, time.time()
         for d in songs_mod.FILES:
             res = songs_mod.generate(song, d, song.rules(d))
             job['log'] += f"\n{d}: {'ok' if res.get('ok') else res.get('message')}"
+        job['song'] = song.title
+        if job.get('box'):   # 再生リストごとの箱へ。DTXMania が起動中なら移さず songlist 直下に置いたまま
+            import boxes
+            try:
+                r = boxes.move(self.state.root, [song], job['box'])[0]
+                job['moved'] = bool(r.get('ok'))
+                job['log'] += f"\n箱へ移動: {r.get('to') or r.get('message')}"
+            except Exception as e:  # noqa: BLE001
+                job['log'] += f'\n箱へ移せませんでした（あとで「箱へ移す」で）: {e}'
         self.state.rescan()
         job['state'] = 'done'
