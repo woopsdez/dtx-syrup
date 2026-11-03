@@ -32,7 +32,10 @@
 
 ### 2b. リズムゲームの難度設計（Guitar Hero / Rock Band / DDR / 太鼓 / Rocksmith）
 - 下位難易度は上位の**部分集合**として、Expert → Hard → Medium → Easy の順に写して削る。「細かい変奏を消してパターンを反復的に（グルーヴと一貫性のため）」「16 分の拾い音はグルーヴに不可欠なときだけ残し、周囲を薄くする」[GH1]
-- Rock Band の減譜: Easy = 1〜2 セクションだけキック + スネア、他はキックなし、キックと同時打ち禁止。Medium = 3 肢同時なし、基本 4 分（遅い曲は 8 分）、両手打ちを片手にしない、HH のパターンは Hard から引き継ぐ [RB2]
+- Rock Band の減譜: Easy = 1〜2 セクションだけキック + スネア（シンバル抜き）、他のセクションはキックを全部消す、キックと手の同時打ち禁止（キック + クラッシュも不可）、目安 1 小節 2 音。Medium = 4 分主体（右手の 8 分刻みを 4 分に落とすのは 140 BPM 以上のときだけ）、3 肢同時なし、タイムキープの合間のキックは削る、通常ビート中の両手打ちを片手に変えない。Hard = 8 分グリッド（16 分は 8 分に間引く）、目安 8 分 7 個 / 小節。**右手の HH パターンは Hard と Medium で同型にする** [RB2]
+- CAT（RBN 準拠の自動減譜ツール）: Expert → Hard → Medium → Easy と**段階的にコピーして間引く**。グリッド既定 Hard = 1/8、Medium = 1/4、Easy = 1/4（ドラム）。グリッド外は ±20 tick まで許容。「sparse」= 直前の残存ノートから 1 グリッド以上離れた裏ノートは残す。「same」= 直前と同じ音なら 1 段細かいグリッドでも残す。キックは Medium で「スネア / タムと重なるとき」、Easy で「何かと重なるとき」削る。ロール区間は保護 [CAT]
+- EasyChartGenerator（Clone Hero 用の自動生成）: Hard = 4 分グリッドだが**直前の残存ノートから 1 拍以上空けば位置を問わず残す**（フレーズ頭の拾い音）。1・3 拍はキック + 手 1 音、2・4 拍は最大 2 音。Medium = キックは小節の 1 拍目だけ・単独。Easy = 1・3 拍のみ（1 小節 2 音）。裏拍が表拍より多い曲は半テンポとみなして BPM を 2 倍に [ECG]
+- 日本語の DTX / GITADORA / 太鼓の「下位譜面の作り方」を明文化した資料は見つからなかった（DTXMania wiki は操作説明のみ）
 - Dance Dance Convolution: 初心者譜面は主に 4 分 / 8 分、最易で 1 音 / 秒未満。「下位譜面は上位の部分集合ではない（人は再構成する）」→ 削除だけで近づけるにはセクション単位のテンプレートが要る [DDC]
 - osu!taiko かんたん / ふつう: 音符間隔 ≥ 1/2 拍、連打は 7 個以下で直後に休み、32〜36 拍ごとに休憩、拍間隔を一定にして予測可能に、複数レイヤーを同時に追わせない [T1]
 - Rocksmith の Dynamic Difficulty: **フレーズ単位**で難易度レベルを持ち、同じフレーズは曲中どこでも同じ簡略化。細分化は「奇数小節の新規音だけ先に足す」[RS1]
@@ -57,6 +60,8 @@
 - 隣接小節の署名の類似度（Jaccard ≥ 0.75）で連結してセクションにし、各セクションの最頻の署名を**署名パターン**とする
 - フィル: タムを含む、または前後の小節との新規性が局所ピークの小節（上限 = 小節数の 10%）
 - 境界: セクションの先頭小節。1 拍目のシンバル / クラッシュがあれば境界の確度を上げる
+- 半テンポ: スネアが 3 拍目だけの曲（裏拍 > 表拍）は 2 小節を 1 小節として扱う（EasyChartGenerator の BPM 2 倍と同じ）
+- 拾い音: 直前の残存打点から 1 拍以上空いている打点は、グリッド外でも残す（フレーズ頭を消さない）
 
 ### C. 層ごとの削除（難易度 = どの層まで剥がすか）
 打点ごとに「拍節重み × 楽器の重み + シンコペ度 + 一貫性ボーナス（セクション内の小節の 80% 以上に同じ打点がある）」の点を付け、**セクションの署名パターンに対して 1 回だけ**目標密度まで低い点から削り、同じマスクをセクションの全小節に当てる。
@@ -112,6 +117,8 @@
 - [HO1] 法政大 曽我 2014: 初心者向けドラム自動採譜 https://www.slp.k.hosei.ac.jp/doc/2014/11k1025_2.pdf
 - [RB1][RB2] Rock Band 減譜の慣例（元スレは 404、検索要約のみ） https://rhythmgamingworld.com/?p=397118 https://rhythmgamingworld.com/?p=389964 https://rhythmgamingworld.com/?p=391313
 - [GH1] Guitar Hero 下位難易度の作り方 https://mariteaux.somnolescent.net/modding/guitar-hero/tutorials/authoring-lower-difficulties/
+- [CAT] C3 Automation Tools（RBN 準拠の減譜: `reduce_5lane` / `remove_notes` / `remove_kick`） https://github.com/abefacciazzi/CAT
+- [ECG] EasyChartGenerator（`notes_to_diff_drums`） https://github.com/eerovil/EasyChartGenerator
 - [DDC] Dance Dance Convolution https://arxiv.org/abs/1703.06891
 - [T1] osu!taiko ランキング基準 https://osu.ppy.sh/wiki/en/Ranking_criteria/osu!taiko
 - [RS1] Rocksmith DDC https://customsforge.com/topic/2863-dynamic-difficulty-creator/ https://customsforge.com/topic/10147-ddc-best-practices/
