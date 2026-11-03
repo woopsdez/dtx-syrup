@@ -55,6 +55,21 @@ class EndChipTest(unittest.TestCase):
         kept, _ = simplify.simplify(notes, simplify.normalize(None, 'beginner'), 2.0)
         self.assertIn((4, '12', 30), {(k.bar, k.ch, k.slot) for k in kept})
 
+    def test_render_without_movie(self):
+        master = dtx.parse_text(MASTER.replace('#BGMWAV: 01', '#BGMWAV: 01\r\n#AVI01: movie.mp4'))
+        p = simplify.normalize(None, 'easy')
+        self.assertFalse(p['movie'])   # 既定は動画なし
+        kept, _ = simplify.simplify(master.notes, p, 2.0, master.max_bar)
+        with_movie = dtx.render(master, kept, difficulty='easy', params=p, movie=True)
+        self.assertIn('#AVI01: movie.mp4', with_movie)
+        self.assertIn('#00154: ', with_movie)
+        without = dtx.render(master, kept, difficulty='easy', params=p, movie=False)
+        self.assertNotIn('#AVI01', without)
+        self.assertNotIn('#00154: ', without)      # 動画チップ（ch 54）も消える
+        self.assertIn('#00101: ', without)         # BGM はそのまま
+        again = dtx.parse_text(without)
+        self.assertEqual({(n.bar, n.ch, n.pos) for n in again.notes}, {(k.bar, k.ch, k.slot / k.grid) for k in kept})
+
 
 if __name__ == '__main__':
     unittest.main()

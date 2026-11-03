@@ -114,8 +114,16 @@ def cmd_log(root: Path, names: list[str]) -> int:
 def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
     import server
 
-    srv = server.make_server(root, port)
     url = f'http://127.0.0.1:{port}/'
+    try:
+        srv = server.make_server(root, port)
+    except OSError as e:
+        if getattr(e, 'winerror', None) == 10048 or getattr(e, 'errno', None) in (48, 98):
+            print(f'DTX Syrup はもう起動しています: {url}（ポート {port} が使用中）')
+            if open_browser:
+                webbrowser.open(url)
+            return 0
+        raise
     print('DTX Syrup:', url, ' songlist:', root, ' (Ctrl+C で終了)')
     if open_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()

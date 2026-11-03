@@ -161,24 +161,31 @@ def _free_wav_id(lines: list[str]) -> str:
     return 'ZZ'
 
 
+MOVIE_CHANNELS = {'54', '5A'}            # 背景動画のチップ（AVI / 全画面 AVI）
+_MOVIE_HEADER = re.compile(r'^#(AVI|VIDEO)', re.IGNORECASE)
+
+
 def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | None = None,
-           end_time: float | None = None, silence: str = 'silence.wav') -> str:
+           end_time: float | None = None, silence: str = 'silence.wav', movie: bool = True) -> str:
     """間引き結果 kept（bar, ch, slot, grid, chip を持つ列）から DTX 本文を作る。
 
     ヘッダとドラム以外のデータ行は master をそのまま写す。ドラム行は kept から作り直す。
     end_time（秒）を渡すと、最後の打点より後ろのその時刻に無音チップ（#WAV: silence）を置き、
     DTXMania が音源の終わりまで演奏を続けるようにする（DTXMania は最後のチップで結果画面へ移る）。
+    movie=False なら背景動画（#AVI ヘッダと ch 54 / 5A）を写さない（動画のデコードが重い PC 向け）。
     """
     header_lines: list[str] = []
     other_data: dict[tuple[int, str], str] = {}
     for ln in master.lines:
         m = DATA_LINE.match(ln)
         if m:
-            if m.group(2) not in DRUM_CHANNELS:
+            if m.group(2) not in DRUM_CHANNELS and (movie or m.group(2).upper() not in MOVIE_CHANNELS):
                 other_data[(int(m.group(1)), m.group(2))] = ln.rstrip()
             continue
         if any(m in ln for m in MARKERS):
             continue  # 二重に印を付けない（生成物を入力にしたとき）
+        if not movie and _MOVIE_HEADER.match(ln):
+            continue
         header_lines.append(ln.rstrip())
 
     # 1 行目のコメントの直後に印。ヘッダ内の #DLEVEL は難易度に合わせて差し替える

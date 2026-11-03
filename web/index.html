@@ -309,6 +309,7 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
               <option value="0">0 手だけ（キックなし）</option><option value="1">1 最初の一歩</option><option value="2">2 Beginner</option>
               <option value="3">3 中間</option><option value="4">4 Easy</option><option value="5">5 ほぼそのまま</option></select></label>
             <label class="field">濃さの上限（1 秒あたり）<select id="pNps"></select></label>
+            <label class="field check"><input type="checkbox" id="pMovie">背景動画を入れる（重いときは外す）</label>
           </div>
         </fieldset>
         <fieldset><legend>層（レベルを変えると既定に戻る）</legend>
@@ -384,8 +385,8 @@ const LAYER_OPTS = {
 };
 let LEVELS = []; // /api/songs の levels（simplify.LEVELS）
 let DEFAULTS = { // 難易度ごとの既定ルール。/api/songs の defaults（simplify.py）で上書きされる
-  beginner: { level: 2, hh: '4', kick: 'on', sd: '24', toms: false, fill: 'toms2', chord: 1, nps: 3, ghost: true, offsets: {} },
-  easy: { level: 4, hh: '8', kick: '8', sd: 'all', toms: true, fill: '8', chord: 2, nps: 7, ghost: true, offsets: {} },
+  beginner: { level: 2, hh: '4', kick: 'on', sd: '24', toms: false, fill: 'toms2', chord: 1, nps: 3, ghost: true, movie: false, offsets: {} },
+  easy: { level: 4, hh: '8', kick: '8', sd: 'all', toms: true, fill: '8', chord: 2, nps: 7, ghost: true, movie: false, offsets: {} },
 };
 const FILE = { beginner: 'score_beginner.dtx', easy: 'score_easy.dtx' };
 const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
@@ -704,14 +705,14 @@ function fillSelect(id, opts) { $(id).innerHTML = opts.map(([v, l]) => `<option 
 for (const k of ['hh', 'kick', 'sd', 'fill', 'nps']) fillSelect(`#p${k[0].toUpperCase()}${k.slice(1)}`, LAYER_OPTS[k]);
 function paramsToControls() {
   $('#pLevel').value = params.level; $('#pHh').value = params.hh; $('#pKick').value = params.kick; $('#pSd').value = params.sd;
-  $('#pFill').value = params.fill; $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost;
+  $('#pFill').value = params.fill; $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost; $('#pMovie').checked = !!params.movie;
   const nps = $('#pNps'), v = String(+params.nps);
   if (![...nps.options].some((o) => o.value === v)) nps.add(new Option(`${v} 打`, v));
   nps.value = v;
 }
 function controlsToParams() {
   params = { level: +$('#pLevel').value, hh: $('#pHh').value, kick: $('#pKick').value, sd: $('#pSd').value, fill: $('#pFill').value,
-    chord: +$('#pChord').value, toms: $('#pToms').checked, ghost: $('#pGhost').checked, nps: +$('#pNps').value, offsets: params.offsets || {} };
+    chord: +$('#pChord').value, toms: $('#pToms').checked, ghost: $('#pGhost').checked, movie: $('#pMovie').checked, nps: +$('#pNps').value, offsets: params.offsets || {} };
 }
 function levelToControls() { // レベルを変えたら層のスイッチをそのレベルの既定に戻す
   const lv = LEVELS[+$('#pLevel').value];
