@@ -1,3 +1,38 @@
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+build/
+dist/
+*.egg-info/
+
+# このセッション・エディタのもの
 .claude/
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# ローカル設定（置き場所など。例は dtx_syrup.local.example.json）
+dtx_syrup.local.json
+*.log
+*.bak*
+
+# 曲データは絶対に入れない（市販曲の音声・動画・譜面・プレイログ）
+*.ogg
+*.mp3
+*.wav
+*.mp4
+*.webm
+*.m4a
+*.dtx
+*.bms
+*.bme
+*.gda
+set.def
+dtx_syrup.json
+songlist/
+work/
+output/
