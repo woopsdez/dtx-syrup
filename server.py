@@ -259,9 +259,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({'error': str(e)}, 500)
 
 
+class _Server(ThreadingHTTPServer):
+    allow_reuse_address = False   # 同じポートに 2 つ目を起動させない（古いサーバーが残っていると応答が古いままになる）
+
+
 def make_server(root: Path, port: int) -> ThreadingHTTPServer:
     state = State(root)
     handler = type('BoundHandler', (Handler,), {'state': state})
-    srv = ThreadingHTTPServer(('127.0.0.1', port), handler)
+    srv = _Server(('127.0.0.1', port), handler)
     srv.daemon_threads = True
     return srv
