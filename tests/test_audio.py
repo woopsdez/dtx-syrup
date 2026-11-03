@@ -39,10 +39,10 @@ class EndChipTest(unittest.TestCase):
         master = dtx.parse_text(MASTER)   # BPM 120 = 1 小節 2 秒
         p = simplify.normalize(None, 'easy')
         kept, _ = simplify.simplify(master.notes, p, 2.0, master.max_bar)
-        text = dtx.render(master, kept, difficulty='easy', params=p, end_time=5.0)
+        text = dtx.render(master, kept, difficulty='easy', params=p, end_time=7.0)   # 最後の打点（小節 3 末）より後
         self.assertIn('#WAVZZ: silence.wav', text)
-        line = next(ln for ln in text.splitlines() if ln.startswith('#00361:'))   # 5 秒 = 小節 3 の半分
-        self.assertEqual(line[len('#00361: '):].index('ZZ') // 2, 32)
+        line = next(ln for ln in text.splitlines() if ln.startswith('#00461:'))   # 7 秒 = 小節 4 の半分
+        self.assertEqual(line[len('#00461: '):].index('ZZ') // 2, 32)
         again = dtx.parse_text(text)
         self.assertEqual({(n.bar, n.ch, n.pos) for n in again.notes}, {(k.bar, k.ch, k.slot / k.grid) for k in kept})
         # 最後の打点より前の end_time なら何も足さない

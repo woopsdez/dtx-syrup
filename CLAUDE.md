@@ -1,6 +1,7 @@
 # play-dtxmania
 
-TubeDTX が作った Master 譜面（score.dtx）から Beginner / Easy を間引いて書き、set.def を整える。
+DTXMania で遊ぶための道具。(1) 楽曲追加（YouTube → TubeDTX → 譜面）、(2) 楽曲簡易化（Master から Beginner / Easy）、
+(3) 練習のリフレクション（DTXMania の演奏記録を曲ごとに貯めて譜面に反映）、(4) 楽曲管理（曲リスト・set.def）。
 ブラウザで曲を流しながら落下ノーツで確かめる。振るまいの規約は `~/.claude/CLAUDE.md`。
 
 ## 動かす
