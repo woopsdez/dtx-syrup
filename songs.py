@@ -16,9 +16,13 @@ DEFAULT_SONGLIST = Path(os.environ.get('DTX_SYRUP_SONGLIST', r'C:\Users\woops\De
 CONFIG_NAME = 'tube_dtx_config.json'   # これがあるフォルダ = TubeDTX 製
 SETTINGS_NAME = 'dtx_syrup.json'   # 曲ごとの設定（題名の直し、難易度ごとのルール、演奏の履歴）
 LEGACY_SETTINGS_NAME = 'play_dtxmania.json'   # 改名前の名前。見つけたら新しい名前に変える
+BOX_PREFIX = 'DTXFiles.'            # songlist 直下のこの名前のフォルダ = DTXMania の選曲画面の「箱」
+BOXDEF_NAME = 'box.def'            # こちらでも箱になる（#TITLE が箱の名前）
+FAVORITE_BOX = '★お気に入り'        # ★ を付けた曲を入れる箱（フォルダは DTXFiles.★お気に入り）
 FILES = {'beginner': 'score_beginner.dtx', 'easy': 'score_easy.dtx'}
 LABELS = {'beginner': 'Beginner', 'easy': 'Easy', 'master': 'Master'}
-MEDIA = {'pre.jpg': 'image/jpeg', 'bgm.ogg': 'audio/ogg', 'pre.ogg': 'audio/ogg'}
+MEDIA = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.bmp': 'image/bmp', '.gif': 'image/gif',
+         '.ogg': 'audio/ogg', '.wav': 'audio/wav', '.mp3': 'audio/mpeg'}   # /media/N/<名前> で配れる拡張子
 
 _BRACKET = re.compile(r'\s*[\[【(（].*?[\]】)）]\s*')
 _QUOTED = re.compile(r'「([^」]+)」')
@@ -58,9 +62,59 @@ def find_master(folder: Path) -> Path | None:
         if (folder / name).exists():
             return folder / name
     for p in sorted(folder.glob('*.dtx')):
-        if p.name not in FILES.values():
+        if p.name.lower() not in FILES.values():
             return p
     return None
+
+
+_SETDEF_LINE = re.compile(r'^#(TITLE|L(\d)(LABEL|FILE))\s*:?\s*(.*?)\s*$', re.IGNORECASE)
+
+
+def read_setdef(folder: Path) -> dict:
+    """set.def の #TITLE と L1..L5（{'title': str, 'levels': [(label, file)]}）。無ければ空。大文字の SET.DEF もある。"""
+    with os.scandir(folder) as it:
+        p = next((Path(e.path) for e in it if e.name.lower() == 'set.def' and e.is_file()), None)
+    if p is None:
+        return {}
+    title, levels = '', {}
+    for ln in dtx.read_text_guess(p).splitlines():
+        m = _SETDEF_LINE.match(ln.strip())
+        if not m:
+            continue
+        if m.group(1).upper() == 'TITLE':
+            title = m.group(4)
+        else:
+            lv = levels.setdefault(int(m.group(2)), {})
+            lv[m.group(3).upper()] = m.group(4)
+    out = [(lv.get('LABEL') or f'L{n}', lv['FILE']) for n, lv in sorted(levels.items()) if lv.get('FILE')]
+    return {'title': title, 'levels': out}
+
+
+def is_box(p: Path) -> bool:
+    return p.is_dir() and (p.name.lower().startswith(BOX_PREFIX.lower()) or (p / BOXDEF_NAME).exists())
+
+
+def box_title(p: Path) -> str:
+    """箱の名前。DTXFiles.<名前> ならその名前、box.def なら #TITLE（無ければフォルダ名）。"""
+    if p.name.lower().startswith(BOX_PREFIX.lower()):
+        return p.name[len(BOX_PREFIX):]
+    try:
+        for ln in dtx.read_text_guess(p / BOXDEF_NAME).splitlines():
+            m = re.match(r'^#TITLE\s*:?\s*(.*?)\s*$', ln.strip(), re.IGNORECASE)
+            if m and m.group(1):
+                return m.group(1)
+    except OSError:
+        pass
+    return p.name
+
+
+def is_song_folder(p: Path) -> bool:
+    """set.def か *.dtx を直接持つフォルダ。TubeDTX 製でなくても曲として数える。"""
+    try:
+        with os.scandir(p) as it:
+            return any((e.name.lower() == 'set.def' or e.name.lower().endswith('.dtx')) and e.is_file() for e in it)
+    except OSError:
+        return False
 
 
 def load_settings(folder: Path) -> dict:
@@ -105,6 +159,12 @@ class Song:
     master: dtx.Chart
     settings: dict = field(default_factory=dict)
     config: dict = field(default_factory=dict)   # tube_dtx_config.json（movie_url など）
+    tube: bool = True                            # TubeDTX 製（tube_dtx_config.json がある）。簡易化できるのはこれだけ
+    box: str = ''                                # 入っている箱の名前（'' = songlist 直下。入れ子は 'A/B'）
+    box_dir: Path | None = None                  # 箱のフォルダ（直下なら songlist）
+    rel: str = ''                                # songlist からの相対パス（UI の鍵。フォルダ名だけだと箱違いで重なり得る）
+    levels: list = field(default_factory=list)   # set.def の [(難易度名, ファイル)]（TubeDTX 製でない曲の表示用）
+    setdef_title: str = ''                       # set.def の #TITLE（TubeDTX 製でない曲の題名。表示だけで保存しない）
 
     @property
     def video_id(self) -> str:
@@ -116,6 +176,35 @@ class Song:
         return self.folder.name
 
     @property
+    def favorite(self) -> bool:
+        return self.box == FAVORITE_BOX
+
+    def move_unit(self) -> Path:
+        """箱へ移すときに動かすフォルダ。zip の包み紙（曲フォルダ 1 つだけを包む透過フォルダ）ごと動かす。"""
+        p = self.folder
+        base = self.box_dir or p.parent
+        while p.parent != base and p.parent != p:
+            parent = p.parent
+            if any(q.is_dir() and q != p for q in parent.iterdir()):
+                break
+            p = parent
+        return p
+
+    @property
+    def added(self) -> float:
+        """songlist に入れた日時（フォルダの作成時刻。Windows では移動しても変わらない）。"""
+        try:
+            st = self.move_unit().stat()
+            return getattr(st, 'st_birthtime', None) or st.st_ctime
+        except OSError:
+            return 0.0
+
+    def last_play(self) -> dict | None:
+        """難易度を問わず一番新しい記録。"""
+        plays = [pl for pls in self.settings.get('plays', {}).values() for pl in pls]
+        return max(plays, key=lambda pl: pl.get('at', '')) if plays else None
+
+    @property
     def audio_seconds(self) -> float | None:
         """bgm.ogg の長さ（秒）。無ければ None。"""
         if not hasattr(self, '_audio_seconds'):
@@ -124,8 +213,17 @@ class Song:
         return self._audio_seconds
 
     @property
+    def preimage(self) -> str | None:
+        """一覧のサムネ。pre.jpg か、DTX の #PREIMAGE（配布譜面は rb.JPG など名前がまちまち）。"""
+        for name in ('pre.jpg', self.master.header.get('PREIMAGE', '').strip()):
+            if name and '/' not in name and '\\' not in name and (self.folder / name).is_file() \
+                    and (self.folder / name).suffix.lower() in MEDIA:
+                return name
+        return None
+
+    @property
     def raw_title(self) -> str:
-        return self.master.header.get('TITLE', self.folder.name)
+        return self.setdef_title or self.master.header.get('TITLE', self.folder.name)
 
     @property
     def raw_artist(self) -> str:
@@ -156,9 +254,19 @@ class Song:
 
     def summary(self, index: int) -> dict:
         m = self.master
+        last = self.last_play()
         return {
             'i': index,
             'dir': self.name,
+            'rel': self.rel,
+            'box': self.box,
+            'fav': self.favorite,
+            'tube': self.tube,
+            'levels': [label for label, _ in self.levels],
+            'added': self.added,
+            'lastPlayed': last['at'] if last else None,
+            'missRate': (last['miss'] / last['notes']) if last and last.get('notes') else None,
+            'playCount': sum(len(pls) for pls in self.settings.get('plays', {}).values()),
             'title': self.title,
             'artist': self.artist,
             'rawTitle': self.raw_title,
@@ -169,7 +277,7 @@ class Song:
             'total': max(m.max_bar * m.beat_seconds(), (m.bgm_start() + self.audio_seconds) if self.audio_seconds else 0.0),
             'master': self.master_path.name,
             'masterNotes': len(m.notes),
-            'thumb': f'/media/{index}/pre.jpg' if (self.folder / 'pre.jpg').exists() else None,
+            'thumb': f'/media/{index}/{self.preimage}' if self.preimage else None,
             'audio': f'/media/{index}/bgm.ogg' if (self.folder / 'bgm.ogg').exists() else None,
             'has': self.status(),
             'videoId': self.video_id,
@@ -179,26 +287,92 @@ class Song:
         }
 
 
+_PARSE_CACHE: dict[Path, tuple[tuple[int, int], dtx.Chart]] = {}
+
+
+def cached_parse(path: Path) -> dtx.Chart:
+    """同じファイル（更新時刻とサイズが同じ）は読み直さない。/api/songs のたびに全曲を走査するため。"""
+    st = path.stat()
+    key = (st.st_mtime_ns, st.st_size)
+    hit = _PARSE_CACHE.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    chart = dtx.parse(path)
+    _PARSE_CACHE[path] = (key, chart)
+    return chart
+
+
+def load_song(folder: Path, root: Path, box: str = '', box_dir: Path | None = None) -> Song | None:
+    """曲フォルダ 1 つを読む。TubeDTX 製は Master（score.dtx）、それ以外は set.def の一番上の難易度を代表にする。"""
+    tube = (folder / CONFIG_NAME).exists()
+    setdef = read_setdef(folder)
+    levels = [(label, fn) for label, fn in setdef.get('levels', []) if (folder / fn).is_file()]
+    master_path = find_master(folder) if tube else None
+    if master_path is None and levels:
+        master_path = folder / levels[-1][1]
+    if master_path is None:
+        master_path = find_master(folder)
+    if master_path is None:
+        return None
+    master = cached_parse(master_path)
+    if tube and not master.notes:
+        return None   # 途中で止まった TubeDTX のフォルダ
+    try:
+        rel = folder.relative_to(root).as_posix()
+    except ValueError:
+        rel = folder.name
+    return Song(folder, master_path, master, load_settings(folder), load_json(folder / CONFIG_NAME) if tube else {},
+                tube=tube, box=box, box_dir=box_dir or root, rel=rel, levels=levels,
+                setdef_title=setdef.get('title', '') if not tube else '')
+
+
+def _walk(d: Path, root: Path, box: str, box_dir: Path, out: list[Song]) -> None:
+    try:
+        with os.scandir(d) as it:
+            children = sorted((Path(e.path) for e in it if e.is_dir()), key=lambda p: p.name.lower())
+    except OSError:
+        return
+    for p in children:
+        if is_box(p):
+            name = box_title(p)
+            _walk(p, root, f'{box}/{name}' if box else name, p, out)
+        elif is_song_folder(p):
+            song = load_song(p, root, box, box_dir)
+            if song is not None:
+                out.append(song)
+        else:
+            _walk(p, root, box, box_dir, out)   # 箱でも曲でもない = 透過フォルダ（zip の包み紙など）。DTXMania も中を辿る
+
+
 def scan(root: Path = DEFAULT_SONGLIST) -> list[Song]:
+    """songlist の全曲（箱の中も）。TubeDTX 製かどうかは Song.tube。"""
     songs: list[Song] = []
     if not root.exists():
         return songs
-    for folder in sorted(p for p in root.rglob(CONFIG_NAME)):
-        folder = folder.parent
-        master_path = find_master(folder)
-        if master_path is None:
-            continue
-        master = dtx.parse(master_path)
-        if not master.notes:
-            continue
-        songs.append(Song(folder, master_path, master, load_settings(folder), load_json(folder / CONFIG_NAME)))
+    _walk(root, root, '', root, songs)
     return songs
+
+
+def boxes(root: Path = DEFAULT_SONGLIST, found: list[Song] | None = None) -> list[dict]:
+    """箱の一覧（songlist 直下の DTXFiles.*、空の箱も）と曲数。入れ子の箱は曲から拾う。"""
+    counts: dict[str, int] = {}
+    for s in (found if found is not None else scan(root)):
+        if s.box:
+            counts[s.box] = counts.get(s.box, 0) + 1
+    names = set(counts)
+    if root.exists():
+        names.update(box_title(p) for p in root.iterdir() if is_box(p))
+    return [{'name': n, 'count': counts.get(n, 0), 'favorite': n == FAVORITE_BOX}
+            for n in sorted(names, key=lambda n: (n != FAVORITE_BOX, n.lower()))]
 
 
 def write_variant(song: Song, difficulty: str, params: dict | None = None, *, force: bool = False) -> dict:
     """score_<difficulty>.dtx を書く。手作りのファイルがあるときは force でも上書きしない。"""
     p = simplify.normalize(params, difficulty)
     target = song.folder / FILES[difficulty]
+    if not song.tube:
+        return {'ok': False, 'skipped': 'tube', 'path': str(target),
+                'message': f'{song.title} は TubeDTX 製ではないので簡易化しません'}
     status = variant_status(song.folder, difficulty)
     if status == 'hand':
         return {'ok': False, 'skipped': 'hand', 'path': str(target),
@@ -214,9 +388,6 @@ def write_variant(song: Song, difficulty: str, params: dict | None = None, *, fo
     dtx.write(target, text)
     return {'ok': True, 'path': str(target), 'notes': len(kept), 'master': len(song.master.notes),
             'replaced': status == 'auto'}
-
-
-_SETDEF_LINE = re.compile(r'^#(TITLE|L(\d)(LABEL|FILE))\s*:?\s*(.*?)\s*$', re.IGNORECASE)
 
 
 def write_setdef(song: Song) -> Path:

@@ -27,14 +27,18 @@ def cmd_list(root: Path) -> int:
     found = songs_mod.scan(root)
     for i, s in enumerate(found):
         st = s.status()
-        mark = ''.join((d[0].upper() if st[d] == 'auto' else d[0] if st[d] == 'hand' else '-') for d in songs_mod.FILES)
-        print(f'{i:3d} [{mark}] {s.title}  —  {s.artist or "?"}  (BPM {s.master.bpm:g}, {len(s.master.notes)} notes, {s.name})')
-    print(f'{len(found)} songs  ([B]/[E] = DTX Syrup 製, [b]/[e] = 手作り/別ツール, - = 無し)')
+        mark = ''.join((d[0].upper() if st[d] == 'auto' else d[0] if st[d] == 'hand' else '-') for d in songs_mod.FILES) if s.tube else '  '
+        box = f'[{s.box}] ' if s.box else ''
+        print(f'{i:3d} [{mark}] {box}{s.title}  -  {s.artist or "?"}  (BPM {s.master.bpm:g}, {len(s.master.notes)} notes, {s.name})')
+    tube = sum(s.tube for s in found)
+    print(f'{len(found)} songs（TubeDTX 製 {tube}）  ([B]/[E] = DTX Syrup 製, [b]/[e] = 手作り/別ツール, - = 無し, [  ] = TubeDTX 製でない）')
+    for b in songs_mod.boxes(root, found):
+        print(f"  箱 {b['name']}: {b['count']} 曲")
     return 0
 
 
 def cmd_generate(root: Path, names: list[str], diffs: list[str], missing: bool) -> int:
-    found = songs_mod.scan(root)
+    found = [s for s in songs_mod.scan(root) if s.tube]   # 簡易化できるのは TubeDTX 製だけ
     targets = found if missing or not names else [s for s in found if s.name in names or s.title in names]
     if not targets:
         print('対象の曲がありません')
@@ -77,7 +81,8 @@ def cmd_check(root: Path) -> int:
     print('songlist:', root, '(exists)' if root.exists() else '(見つかりません)')
     print('TubeDTX :', tubedtx.available())
     found = songs_mod.scan(root)
-    print('TubeDTX 製の曲:', len(found))
+    print('曲:', len(found), '/ TubeDTX 製:', sum(s.tube for s in found),
+          '/ 箱:', ', '.join(f"{b['name']}({b['count']})" for b in songs_mod.boxes(root, found)) or 'なし')
     return 0
 
 
@@ -124,6 +129,8 @@ def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(errors='replace')   # cp932 のコンソールで題名の記号が出せなくても落ちない
     common = argparse.ArgumentParser(add_help=False)  # --songlist はサブコマンドの前後どちらでも
     common.add_argument('--songlist', type=Path, default=None)
     ap = argparse.ArgumentParser(prog='dtx-syrup', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, parents=[common])

@@ -9,7 +9,11 @@ POST /api/batch        {items:[i], diffs:[..], params?} → まとめて書く
 POST /api/settings     {i, title?, artist?} → 題名の直し
 POST /api/add          {url} → TubeDTX で譜面を作る（裏で実行）
 GET  /api/jobs         実行中・終了した add の状態
-GET  /media/N/name     pre.jpg / bgm.ogg / pre.ogg（Range 対応）
+GET  /api/boxes        箱（DTXFiles.*）の一覧と曲数
+POST /api/move         {items:[i], box} → チェックした曲のフォルダを箱へ移す（'' = songlist 直下）
+POST /api/favorite     {i, on} → ★（DTXFiles.★お気に入り へ移す / 元の箱へ戻す）
+GET  /media/N/name     曲フォルダの画像・音源（pre.jpg, bgm.ogg など。Range 対応）
+DTXMania が起動中のときは move / favorite を 409 で断る。
 """
 from __future__ import annotations
 
@@ -19,8 +23,9 @@ import traceback
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
+import boxes
 import records
 import simplify
 import songs as songs_mod
@@ -53,6 +58,14 @@ class State:
     def summaries(self) -> list[dict]:
         with self.lock:
             return [s.summary(i) for i, s in enumerate(self.songs)]
+
+    def boxes(self) -> list[dict]:
+        with self.lock:
+            return songs_mod.boxes(self.root, self.songs)
+
+    def listing(self) -> dict:
+        """一覧の応答（曲・箱）。書いた後や移した後にも同じ形で返す。"""
+        return {'songs': self.summaries(), 'boxes': self.boxes(), 'favoriteBox': songs_mod.FAVORITE_BOX}
 
 
 def per_bar(counts: dict[int, int], max_bar: int) -> list[int]:
@@ -148,8 +161,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_file(WEB_DIR / 'index.html', 'text/html; charset=utf-8')
             if u.path == '/api/songs':
                 self.state.rescan()
-                return self.send_json({'songs': self.state.summaries(), 'defaults': simplify.DEFAULTS,
+                return self.send_json({**self.state.listing(), 'defaults': simplify.DEFAULTS,
                                        'levels': simplify.LEVELS, 'tubedtx': tubedtx.available()})
+            if u.path == '/api/boxes':
+                self.state.rescan()
+                return self.send_json({'boxes': self.state.boxes(), 'favoriteBox': songs_mod.FAVORITE_BOX})
             if u.path == '/api/song':
                 s = self.state.song(q['i'][0])
                 return self.send_json({'notes': {
@@ -169,12 +185,14 @@ class Handler(BaseHTTPRequestHandler):
                     r['exists'] = r['id'] in have   # もう songlist にある動画
                 return self.send_json({'query': query, 'results': results})
             if u.path.startswith('/media/'):
-                parts = u.path.split('/')
-                if len(parts) == 4 and parts[3] in songs_mod.MEDIA:
+                parts = unquote(u.path).split('/')
+                name = parts[3] if len(parts) == 4 else ''
+                ext = Path(name).suffix.lower()
+                if name and name == Path(name).name and name not in ('.', '..') and ext in songs_mod.MEDIA:
                     s = self.state.song(parts[2])
-                    p = s.folder / parts[3]
-                    if p.exists():
-                        return self.send_file(p, songs_mod.MEDIA[parts[3]])
+                    p = s.folder / name
+                    if p.is_file():
+                        return self.send_file(p, songs_mod.MEDIA[ext])
                 return self.send_json({'error': 'not found'}, 404)
             return self.send_json({'error': 'not found'}, 404)
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
@@ -189,6 +207,8 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_json()
             if u.path == '/api/simplify':
                 s = self.state.song(body['i'])
+                if not s.tube:
+                    return self.send_json({'error': f'{s.title} は TubeDTX 製ではないので簡易化しません'}, 400)
                 diff = body['diff']
                 p = simplify.normalize(body.get('params'), diff)
                 m = s.master
@@ -216,8 +236,7 @@ class Handler(BaseHTTPRequestHandler):
                 diff = body['diff']
                 result = songs_mod.generate(s, diff, body.get('params'), save_rules=True)
                 self.state.rescan()
-                result['songs'] = self.state.summaries()
-                return self.send_json(result)
+                return self.send_json({**result, **self.state.listing()})
             if u.path == '/api/batch':
                 diffs = body.get('diffs') or list(songs_mod.FILES)
                 params = body.get('params')
@@ -229,7 +248,30 @@ class Handler(BaseHTTPRequestHandler):
                                                save_rules=params is not None)
                         results.append({'i': i, 'dir': s.name, 'diff': d, **r})
                 self.state.rescan()
-                return self.send_json({'results': results, 'songs': self.state.summaries()})
+                return self.send_json({'results': results, **self.state.listing()})
+            if u.path == '/api/move':
+                with self.state.lock:
+                    targets = [self.state.songs[int(i)] for i in body.get('items', [])]
+                if not targets:
+                    return self.send_json({'error': '移す曲がありません'}, 400)
+                try:
+                    results = boxes.move(self.state.root, targets, body.get('box', ''))
+                except boxes.Busy as e:
+                    return self.send_json({'error': str(e)}, 409)
+                except ValueError as e:
+                    return self.send_json({'error': str(e)}, 400)
+                finally:
+                    self.state.rescan()
+                return self.send_json({'results': results, **self.state.listing()})
+            if u.path == '/api/favorite':
+                s = self.state.song(body['i'])
+                try:
+                    result = boxes.set_favorite(self.state.root, s, bool(body.get('on')))
+                except boxes.Busy as e:
+                    return self.send_json({'error': str(e)}, 409)
+                finally:
+                    self.state.rescan()
+                return self.send_json({**result, **self.state.listing()})
             if u.path == '/api/settings':
                 s = self.state.song(body['i'])
                 for k in ('title', 'artist'):
@@ -243,7 +285,7 @@ class Handler(BaseHTTPRequestHandler):
                 if (s.folder / 'set.def').exists():
                     songs_mod.write_setdef(s)
                 self.state.rescan()
-                return self.send_json({'songs': self.state.summaries()})
+                return self.send_json(self.state.listing())
             if u.path == '/api/add':
                 url = tubedtx.clean_url(body.get('url'))
                 if not url:
@@ -263,8 +305,8 @@ class _Server(ThreadingHTTPServer):
     allow_reuse_address = False   # 同じポートに 2 つ目を起動させない（古いサーバーが残っていると応答が古いままになる）
 
 
-def make_server(root: Path, port: int) -> ThreadingHTTPServer:
-    state = State(root)
+def make_server(root: Path, port: int, watch_records: bool = True) -> ThreadingHTTPServer:
+    state = State(root, watch_records)
     handler = type('BoundHandler', (Handler,), {'state': state})
     srv = _Server(('127.0.0.1', port), handler)
     srv.daemon_threads = True
