@@ -61,15 +61,72 @@ class RoundTest(unittest.TestCase):
         self.assertEqual(simplify.js_round(2.4), 2)
         self.assertEqual(simplify.js_round(2.6), 3)
 
-    def test_allowed(self):
-        self.assertTrue(simplify.allowed('all', 3, 8))
-        self.assertFalse(simplify.allowed('off', 0, 8))
-        self.assertTrue(simplify.allowed('24', 2, 8))
-        self.assertTrue(simplify.allowed('24', 6, 8))
-        self.assertFalse(simplify.allowed('24', 4, 8))
-        self.assertTrue(simplify.allowed('2', 4, 8))
-        self.assertFalse(simplify.allowed('2', 2, 8))
-        self.assertTrue(simplify.allowed('16', 1, 8))  # 密度 >= グリッドなら全部通す
+    def test_normalize_levels_and_old_params(self):
+        p = simplify.normalize(None, 'beginner')
+        self.assertEqual((p['level'], p['hh'], p['kick'], p['sd'], p['chord']), (2, '4', 'on', '24', 1))
+        p = simplify.normalize({'level': 4, 'hh': '4', 'nps': 0}, 'beginner')   # level の既定を個別に上書き
+        self.assertEqual((p['level'], p['hh'], p['kick'], p['nps']), (4, '4', '8', 0.0))
+        p = simplify.normalize({'grid': 8, 'hh': 'all', 'bd': '1', 'chord': 2}, 'easy')   # 2026-11-02 版の params
+        self.assertEqual((p['hh'], p['chord'], p['level']), ('16', 2, 4))
+        self.assertNotIn('grid', p)
+        self.assertEqual(simplify.normalize({'offsets': {'0': -1, '1': 0}}, 'easy')['offsets'], {'0': -1})
+
+    def test_step_down_peels_from_the_top(self):
+        p = simplify.normalize(None, 'easy')
+        seq = []
+        while p is not None and len(seq) < 6:
+            p = simplify.step_down(p)
+            if p:
+                seq.append((p['hh'], p['kick'], p['toms'], p['sd']))
+        self.assertEqual(seq[:4], [('8', '8', False, 'all'), ('8', 'sig', False, 'all'), ('4', 'sig', False, 'all'), ('4', 'on', False, 'all')])
+        self.assertIsNone(simplify.step_down(simplify.normalize({'level': 0}, 'beginner')))
+
+
+class GridTest(unittest.TestCase):
+    @staticmethod
+    def pattern(length: float, bars: int, phase: float = 0.0) -> list:
+        """本当の小節が DTX 小節 × length の 8 ビート（キック 1・3 拍、スネア 2・4 拍、HH 8 分）。"""
+        notes = []
+        for vb in range(bars):
+            for ch, slots, chip in (('13', (0, 8), '0D'), ('12', (4, 12), '09'), ('11', range(0, 16, 2), '05')):
+                for s in slots:
+                    t = phase + (vb + s / 16) * length
+                    bar = int(t)
+                    notes.append(dtx.Note(bar, ch, simplify.js_round((t - bar) * 32), 32, chip))
+        return notes
+
+    def test_detects_three_quarter_bars(self):
+        notes = self.pattern(0.75, 16)
+        g = simplify.detect_grid(notes)
+        self.assertAlmostEqual(g.length, 0.75)
+        self.assertAlmostEqual(g.phase, 0.0)
+        st = simplify.analyze(notes)
+        self.assertEqual(len(st.presence), 1)                 # 全部同じ型
+        self.assertEqual(st.fill_bars, set())
+        self.assertAlmostEqual(st.presence[0][('S', 4)], 1.0)
+
+    def test_plain_bars_stay_plain(self):
+        g = simplify.detect_grid(self.pattern(1.0, 16))
+        self.assertEqual((g.length, g.phase), (1.0, 0.0))
+
+    def test_consistent_mask_and_fill_landing(self):
+        notes = self.pattern(1.0, 8)
+        # 小節 4 をフィルに（タム 16 分 6 発）、小節 5 の頭にキック
+        for i in range(16, 32, 3):
+            notes.append(dtx.Note(4, '14', i, 32, '0H'))
+        notes.sort(key=lambda n: (n.bar, n.i))
+        p = simplify.normalize(None, 'beginner')
+        kept, removed, st, used = simplify.simplify_full(notes, p, 2.0)
+        self.assertIn(4, st.fill_bars)
+        fill_toms = [k.slot for k in kept if k.ch == '14' and k.bar == 4]
+        self.assertLessEqual(len(fill_toms), 2)                # fill = toms2: 4 分の位置のタムを 2 つまで
+        self.assertTrue(all(s % 8 == 0 for s in fill_toms))
+        per_bar = {b: sorted((k.ch, k.slot) for k in kept if k.bar == b) for b in (1, 2, 3, 5, 6)}
+        self.assertEqual(len({tuple(v) for v in per_bar.values()}), 1)   # 型の小節は全部同じ削り方
+        self.assertIn(('13', 0), per_bar[5])                   # 着地（フィルの次の小節頭）
+        self.assertEqual(len(kept) + len(removed), len(notes))
+        easy, _ = simplify.simplify(notes, simplify.normalize(None, 'easy'), 2.0)
+        self.assertTrue(any(k.ch == '14' and k.bar == 4 for k in easy))   # Easy はフィルを 8 分に縮めて残す
 
 
 class ParseTest(unittest.TestCase):
@@ -97,24 +154,22 @@ class SimplifyTest(unittest.TestCase):
 
     def test_beginner_defaults(self):
         p = simplify.normalize(None, 'beginner')
-        kept, removed = simplify.simplify(self.master.notes, p)
-        by = {(k.bar, k.ch, k.slot) for k in kept}
-        # HH は 2 分（8 分割の 0 と 4）。0 は BD と重なり同時押し上限 1 で BD に譲る。弱い HH（レベル 1）は消える
-        self.assertIn((2, '11', 4), by)
-        self.assertNotIn((2, '11', 0), by)
-        self.assertNotIn((2, '11', 2), by)
-        # SD は 2・4 拍、BD は小節頭だけ、タムは消える、弱い BD は消える
-        self.assertIn((2, '12', 2), by)
-        self.assertIn((2, '12', 6), by)
-        self.assertIn((2, '13', 0), by)
-        self.assertNotIn((2, '13', 4), by)
+        kept, removed = simplify.simplify(self.master.notes, p, 2.0, self.master.max_bar)
+        by = {(k.bar, k.ch, k.slot, k.grid) for k in kept}
+        # 位置は元のまま（32 分解像度）。SD は 2・4 拍、BD は表拍（1・3 拍）、弱い BD（レベル 1）とタムは消える
+        self.assertIn((2, '12', 8, 32), by)
+        self.assertIn((2, '12', 24, 32), by)
+        self.assertIn((2, '13', 0, 32), by)
+        self.assertIn((2, '13', 16, 32), by)
+        self.assertNotIn((2, '13', 20, 32), by)
         self.assertFalse(any(k.ch == '14' for k in kept))
-        # 同時押し 1 個: 小節頭は SD が無いので BD > HH で BD が残る
-        head = [k for k in kept if (k.bar, k.slot) == (2, 0)]
-        self.assertEqual([k.ch for k in head], ['13'])
-        # 小節 3 末尾の HH は小節 4 の頭に丸まる
-        self.assertIn((4, '11', 0), by)
+        # 同時打ち 1 個: HH の 4 分は全部 BD / SD と重なるので残らない（手足を同時にしない）
+        self.assertFalse(any(k.ch == '11' and k.bar == 2 for k in kept))
+        # 小節 3 末尾の HH（32 分の拾い）は残っても動かさない（丸めて次の小節頭に移したりしない）
+        self.assertFalse(any(k.bar == 4 for k in kept))
+        self.assertTrue(all(k.slot == 31 for k in kept if k.bar == 3))
         self.assertEqual(len(kept) + len(removed), len(self.master.notes))
+        self.assertTrue(all(k.grid == 32 for k in kept))
 
     def test_easy_keeps_more(self):
         kb, _ = simplify.simplify(self.master.notes, simplify.normalize(None, 'beginner'))
@@ -190,13 +245,13 @@ class SongsTest(unittest.TestCase):
         self.assertEqual(summary['thumb'], None)
         self.assertAlmostEqual(summary['bgmStart'], 0.5)
 
-        r = songs.generate(s, 'beginner', {'grid': 4, 'hh': '1'}, save_rules=True)
+        r = songs.generate(s, 'beginner', {'level': 1, 'hh': '2'}, save_rules=True)
         self.assertTrue(r['ok'])
         self.assertEqual(s.status()['beginner'], 'auto')
         saved = json.loads((self.folder / songs.SETTINGS_NAME).read_text(encoding='utf-8'))
-        self.assertEqual(saved['rules']['beginner']['grid'], 4)
-        self.assertEqual(saved['rules']['beginner']['hh'], '1')
-        self.assertEqual(saved['rules']['beginner']['sd'], '24')  # 省略分は既定で埋まる
+        self.assertEqual(saved['rules']['beginner']['level'], 1)
+        self.assertEqual(saved['rules']['beginner']['hh'], '2')
+        self.assertEqual(saved['rules']['beginner']['sd'], '24')  # 省略分は level の既定で埋まる
 
         setdef = (self.folder / 'set.def').read_bytes()
         self.assertIn(b'\r\n', setdef)

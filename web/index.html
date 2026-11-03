@@ -244,23 +244,29 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
     <details class="params">
       <summary>間引きルールを調整（編集したい人向け）</summary>
       <div class="groups">
-        <fieldset><legend>刻み</legend>
+        <fieldset><legend>レベルと濃さ</legend>
           <div class="fields">
-            <label class="field">グリッド<select id="pGrid"><option value="4">4 分</option><option value="8">8 分</option><option value="16">16 分</option><option value="32">32 分（そのまま）</option></select></label>
-            <label class="field">同時押しの上限<select id="pChord"><option value="1">1 個</option><option value="2">2 個</option><option value="3">3 個</option></select></label>
+            <label class="field">レベル<select id="pLevel">
+              <option value="0">0 手だけ（キックなし）</option><option value="1">1 最初の一歩</option><option value="2">2 Beginner</option>
+              <option value="3">3 中間</option><option value="4">4 Easy</option><option value="5">5 ほぼそのまま</option></select></label>
+            <label class="field">濃さの上限（1 秒あたり）<select id="pNps"></select></label>
           </div>
         </fieldset>
-        <fieldset><legend>レーンごとの密度</legend>
+        <fieldset><legend>層（レベルを変えると既定に戻る）</legend>
           <div class="fields">
             <label class="field">ハイハット<select id="pHh"></select></label>
+            <label class="field">キック<select id="pKick"></select></label>
             <label class="field">スネア<select id="pSd"></select></label>
-            <label class="field">バスドラム<select id="pBd"></select></label>
-            <label class="field check"><input type="checkbox" id="pToms">タムを残す</label>
+            <label class="field">フィル<select id="pFill"></select></label>
+            <label class="field">同時打ちの上限<select id="pChord"><option value="1">1 個</option><option value="2">2 個</option><option value="3">3 個</option></select></label>
+            <label class="field check"><input type="checkbox" id="pToms">ビート中のタムを残す</label>
+            <label class="field check"><input type="checkbox" id="pGhost">弱い音（ゴースト）を消す</label>
           </div>
         </fieldset>
-        <fieldset><legend>音の強さ</legend>
+        <fieldset><legend>プレイログ（DTXMania の記録）</legend>
           <div class="fields">
-            <label class="field check"><input type="checkbox" id="pGhost">弱い音（ゴースト）を消す</label>
+            <label class="field check"><input type="checkbox" id="pAdapt">ミスが集中した区間を 1 段薄く</label>
+            <div class="field" id="playInfo">記録なし</div>
           </div>
         </fieldset>
       </div>
@@ -300,14 +306,18 @@ const CHIP_BASE = { '11': 2, '12': 6, '13': 10, '14': 14, '15': 18, '17': 22, '1
 const level = (ch, chip) => parseInt(chip, 36) - (CHIP_BASE[ch] ?? 0);
 const PRIORITY = ['12', '13', '11', '14', '15']; // 同時押しを削るときに残す順
 
-const DENSITY_OPTS = {
-  hh: [['off', '消す'], ['1', '小節頭だけ'], ['2', '2 分'], ['4', '4 分'], ['8', '8 分'], ['16', '16 分'], ['all', 'そのまま']],
-  sd: [['off', '消す'], ['24', '2・4 拍だけ'], ['4', '4 分'], ['8', '8 分'], ['all', 'そのまま']],
-  bd: [['off', '消す'], ['1', '小節頭だけ'], ['2', '2 分'], ['4', '4 分'], ['8', '8 分'], ['all', 'そのまま']],
+// 層のスイッチ（simplify.py の params）。レベルを変えると LEVELS の既定値に戻る
+const LAYER_OPTS = {
+  hh: [['off', 'なし'], ['2', '1・3 拍'], ['4', '4 分'], ['8', '8 分'], ['16', 'そのまま']],
+  kick: [['off', 'なし'], ['1', '小節頭だけ'], ['on', '表拍'], ['sig', '表拍 + 型の裏拍 1 つ'], ['8', '8 分まで'], ['all', 'そのまま']],
+  sd: [['24', '2・4 拍'], ['on', '8 分まで'], ['all', 'そのまま']],
+  fill: [['skip', '省略して着地だけ'], ['toms2', '4 分のタム 2 つまで'], ['8', '8 分に縮める'], ['all', 'そのまま']],
+  nps: [['1.5', '1.5 打'], ['2', '2 打'], ['3', '3 打'], ['4', '4 打'], ['5', '5 打'], ['7', '7 打'], ['9', '9 打'], ['0', '上限なし']],
 };
+let LEVELS = []; // /api/songs の levels（simplify.LEVELS）
 let DEFAULTS = { // 難易度ごとの既定ルール。/api/songs の defaults（simplify.py）で上書きされる
-  beginner: { grid: 8, hh: '2', sd: '24', bd: '1', toms: false, ghost: true, chord: 1 },
-  easy: { grid: 16, hh: '8', sd: 'all', bd: '4', toms: true, ghost: true, chord: 2 },
+  beginner: { level: 2, hh: '4', kick: 'on', sd: '24', toms: false, fill: 'toms2', chord: 1, nps: 3, ghost: true, offsets: {} },
+  easy: { level: 4, hh: '8', kick: '8', sd: 'all', toms: true, fill: '8', chord: 2, nps: 7, ghost: true, offsets: {} },
 };
 const FILE = { beginner: 'score_beginner.dtx', easy: 'score_easy.dtx' };
 const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
@@ -326,6 +336,7 @@ function applySongs(list) {
 async function refreshSongs() {
   const d = await api('/api/songs');
   if (d.defaults) DEFAULTS = d.defaults;
+  if (d.levels) LEVELS = d.levels;
   tubedtxInfo = d.tubedtx || null;
   applySongs(d.songs);
 }
@@ -351,8 +362,12 @@ function lowerBound(arr, t) { let lo = 0, hi = arr.length; while (lo < hi) { con
 let buildSeq = 0;
 async function buildView() {
   const s = songs[cur], mt = s.mt, seq = ++buildSeq;
-  const [notes, r] = await Promise.all([loadDetail(s), api('/api/simplify', { i: s.idx, diff, params })]);
+  const adapt = $('#pAdapt').checked;
+  if (!adapt) params.offsets = {};
+  const [notes, r] = await Promise.all([loadDetail(s), api('/api/simplify', { i: s.idx, diff, params, adapt })]);
   if (seq !== buildSeq) return false;
+  params.offsets = (r.params && r.params.offsets) || {}; // ミス区間から決めた型ごとの上下。書くときも同じものを使う
+  view.structure = r.structure || null; view.used = r.used || {}; view.play = r.play || null;
   view.kept = r.kept.map(([bar, ch, slot, grid, lvl]) => ({ bar, ch, slot, grid, lvl, t: (bar - 1 + slot / grid) * mt, lane: LANE_IDX[ch] })).filter((v) => v.lane != null).sort((a, b) => a.t - b.t);
   view.removed = r.removed.map(([bar, ch, pos]) => ({ t: (bar - 1 + pos) * mt, lane: LANE_IDX[ch] })).filter((v) => v.lane != null).sort((a, b) => a.t - b.t);
   const hand = notes.hand && notes.hand[diff];
@@ -450,6 +465,21 @@ function drawScrub(t) {
     ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x0, H - hm, w, hm);
     ctx.fillStyle = '#a8a8b0'; ctx.fillRect(x0, H - hg, w, hg);
   }
+  // 上端: セクション（型ごとに色）とフィル（白）。下端: 直近のプレイでミスがあった区間（赤）
+  const bx = (bar) => (((bar - 1) * s.mt) / total) * W;
+  if (view.structure) {
+    for (const sec of view.structure.sections) {
+      ctx.fillStyle = `hsl(${(sec.cluster * 53) % 360} 45% 55% / .8)`;
+      ctx.fillRect(bx(sec.start), 0, Math.max(1, bx(sec.end) - bx(sec.start) - 1), 3);
+      ctx.fillStyle = 'rgba(255,255,255,.85)';
+      for (const [a, b] of sec.fills) ctx.fillRect(bx(a), 0, Math.max(1, bx(b) - bx(a) - 1), 3);
+    }
+  }
+  if (view.play && view.play.map) {
+    const m = view.play.map, segW = ((s.maxBar * s.mt) / total) * W / m.length;
+    ctx.fillStyle = 'rgba(255,96,96,.8)';
+    for (let k = 0; k < m.length; k++) if (m[k] === '1') ctx.fillRect(k * segW, H - 3, Math.max(1, segW - .5), 3);
+  }
   const px = (t / total) * W;
   ctx.fillStyle = '#ffffff'; ctx.fillRect(px - 1, 0, 2, H);
 }
@@ -522,13 +552,21 @@ audio.addEventListener('ended', () => { if (playing) stop(); });
 
 // ---- 画面 ----
 function fillSelect(id, opts) { $(id).innerHTML = opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join(''); }
-fillSelect('#pHh', DENSITY_OPTS.hh); fillSelect('#pSd', DENSITY_OPTS.sd); fillSelect('#pBd', DENSITY_OPTS.bd);
+for (const k of ['hh', 'kick', 'sd', 'fill', 'nps']) fillSelect(`#p${k[0].toUpperCase()}${k.slice(1)}`, LAYER_OPTS[k]);
 function paramsToControls() {
-  $('#pGrid').value = params.grid; $('#pHh').value = params.hh; $('#pSd').value = params.sd; $('#pBd').value = params.bd;
-  $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost;
+  $('#pLevel').value = params.level; $('#pHh').value = params.hh; $('#pKick').value = params.kick; $('#pSd').value = params.sd;
+  $('#pFill').value = params.fill; $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost;
+  const nps = $('#pNps'), v = String(+params.nps);
+  if (![...nps.options].some((o) => o.value === v)) nps.add(new Option(`${v} 打`, v));
+  nps.value = v;
 }
 function controlsToParams() {
-  params = { grid: +$('#pGrid').value, hh: $('#pHh').value, sd: $('#pSd').value, bd: $('#pBd').value, chord: +$('#pChord').value, toms: $('#pToms').checked, ghost: $('#pGhost').checked };
+  params = { level: +$('#pLevel').value, hh: $('#pHh').value, kick: $('#pKick').value, sd: $('#pSd').value, fill: $('#pFill').value,
+    chord: +$('#pChord').value, toms: $('#pToms').checked, ghost: $('#pGhost').checked, nps: +$('#pNps').value, offsets: params.offsets || {} };
+}
+function levelToControls() { // レベルを変えたら層のスイッチをそのレベルの既定に戻す
+  const lv = LEVELS[+$('#pLevel').value];
+  if (lv) { params = { ...params, ...lv, level: +$('#pLevel').value }; paramsToControls(); }
 }
 function isGenerated(s, d) { return !!s.has[d]; } // 'auto'（play-dtxmania 製）か 'hand'（手作り・別ツール）
 const checkedSongs = () => songs.filter((s) => checked[s.dir]);
@@ -571,14 +609,24 @@ async function renderSong() {
   const hasHand = !!view.hand;
   $('#showHand').disabled = !hasHand;
   $('#handLabel').setAttribute('aria-disabled', !hasHand);
-  const kept = view.kept, st2 = view.stats || { master: s.masterNotes }, m = view.match;
+  const kept = view.kept, st2 = view.stats || { master: s.masterNotes }, m = view.match, str = view.structure;
+  const ratio = str ? str.grid.tempoRatio : 1, nSec = str ? str.sections.length : 0;
+  const nFill = str ? str.sections.reduce((a, sec) => a + sec.fills.length, 0) : 0;
+  const lowered = Object.keys(params.offsets || {}).length;
   const tiles = [
     [kept.length, 'ノート数'],
     [st2.master ? Math.round((kept.length / st2.master) * 100) + '%' : '—', `Master ${st2.master} 比`],
     [Math.max(0, ...view.counts), '最大 / 小節'],
+    [nSec, `セクション（フィル ${nFill} 小節${lowered ? `・薄くした型 ${lowered}` : ''}）`],
+    [Math.abs(ratio - 1) < 0.01 ? '×1' : `×${ratio.toFixed(2)}`, ratio > 1.01 || ratio < 0.99 ? 'テンポ比（DTX の小節と曲の小節がずれている）' : 'テンポ比（DTX の小節 = 曲の小節）'],
     [m ? Math.round(m.rate * 100) + '%' : '—', m ? `既存譜面と一致 ${m.inter}/${m.hand}` : '既存譜面なし'],
   ];
   $('#stats').innerHTML = tiles.map(([v, l]) => `<div class="tile"><b>${v}</b><span>${l}</span></div>`).join('');
+  const play = view.play;
+  $('#pAdapt').disabled = !play;
+  $('#playInfo').textContent = play
+    ? `直近 ${play.at}: ${play.notes - play.miss}/${play.notes} 打（${Math.round(((play.notes - play.miss) / Math.max(1, play.notes)) * 100)}%）コンボ ${play.combo}。赤い区間がミス`
+    : 'この難易度の記録はまだありません（DTXMania で遊ぶと増えます）';
   drawAll();
 }
 function selectSong(i, open) {
@@ -714,6 +762,7 @@ const setSide = (narrow) => {
 $('#sideBtn').addEventListener('click', () => setSide($('#main').dataset.side !== 'narrow'));
 try { setSide(localStorage.getItem('pd.side') === '1'); } catch (e) { setSide(false); }
 $('#diffTabs').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setDiff(b.dataset.d); });
+$('#pLevel').addEventListener('change', levelToControls); // 先に層のスイッチを既定へ戻し、次の共通ハンドラで読み直す
 document.querySelectorAll('.params select, .params input').forEach((el) => el.addEventListener('change', () => { controlsToParams(); renderSong(); }));
 $('#showRemoved').addEventListener('change', drawAll);
 $('#showHand').addEventListener('change', drawAll);

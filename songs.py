@@ -186,7 +186,7 @@ def write_variant(song: Song, difficulty: str, params: dict | None = None, *, fo
     if status == 'hand':
         return {'ok': False, 'skipped': 'hand', 'path': str(target),
                 'message': f'{target.name} は手作り（または別ツール）の譜面なので上書きしません'}
-    kept, _removed = simplify.simplify(song.master.notes, p)
+    kept, _removed = simplify.simplify(song.master.notes, p, song.master.beat_seconds(), song.master.max_bar)
     text = dtx.render(song.master, kept, difficulty=difficulty, params=p,
                       dlevel=simplify.dlevel_for(kept, song.master.notes))
     dtx.write(target, text)

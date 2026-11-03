@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -169,15 +170,19 @@ def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | 
         out.pop()
     out.append('')
 
-    drum_data: dict[tuple[int, str], dict[int, str]] = {}
-    grids: dict[tuple[int, str], int] = {}
+    # 位置は動かさない。同じ小節・チャンネルに分解能の違うノートが混じるときは最小公倍数の分解能で書く
+    by_key: dict[tuple[int, str], list] = {}
     for k in kept:
-        key = (k.bar, k.ch)
-        drum_data.setdefault(key, {})[k.slot] = k.chip
-        grids[key] = max(grids.get(key, 0), k.grid)
+        by_key.setdefault((k.bar, k.ch), []).append(k)
     data_lines: dict[tuple[int, str], str] = dict(other_data)
-    for key, slots in drum_data.items():
-        g = grids[key]
+    for key, ks in by_key.items():
+        g = 1
+        for k in ks:
+            g = g * k.grid // math.gcd(g, k.grid)
+        g = min(g, 192)
+        slots: dict[int, str] = {}
+        for k in ks:
+            slots[k.slot * g // k.grid] = k.chip
         data_lines[key] = f'#{key[0]:03d}{key[1]}: ' + ''.join(slots.get(s, '00') for s in range(g))
     for key in sorted(data_lines):
         out.append(data_lines[key])

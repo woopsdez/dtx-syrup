@@ -149,7 +149,7 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == '/api/songs':
                 self.state.rescan()
                 return self.send_json({'songs': self.state.summaries(), 'defaults': simplify.DEFAULTS,
-                                       'tubedtx': tubedtx.available()})
+                                       'levels': simplify.LEVELS, 'tubedtx': tubedtx.available()})
             if u.path == '/api/song':
                 s = self.state.song(q['i'][0])
                 return self.send_json({'notes': {
@@ -191,17 +191,25 @@ class Handler(BaseHTTPRequestHandler):
                 s = self.state.song(body['i'])
                 diff = body['diff']
                 p = simplify.normalize(body.get('params'), diff)
-                kept, removed = simplify.simplify(s.master.notes, p)
-                st = simplify.stats(kept, s.master.notes)
+                m = s.master
+                play = (s.settings.get('plays', {}).get(diff) or [None])[-1]
+                if body.get('adapt') and play:   # 直近のプレイのミス区間から、型ごとに 1 段薄く
+                    structure = simplify.analyze(m.notes, m.max_bar, p['ghost'])
+                    p['offsets'] = simplify.offsets_from_map(structure, play.get('map', ''), m.max_bar)
+                kept, removed, structure, used = simplify.simplify_full(m.notes, p, m.beat_seconds(), m.max_bar)
+                st = simplify.stats(kept, m.notes)
                 hand = s.hand_variants().get(diff)
                 return self.send_json({
                     'kept': [k.as_list() for k in kept],
                     'removed': [[b, ch, pos] for b, ch, pos in removed],
-                    'counts': per_bar(st.pop('counts'), s.master.max_bar),
-                    'masterCounts': per_bar(st.pop('masterCounts'), s.master.max_bar),
+                    'counts': per_bar(st.pop('counts'), m.max_bar),
+                    'masterCounts': per_bar(st.pop('masterCounts'), m.max_bar),
                     'match': simplify.match_rate(kept, hand.notes if hand else None),
                     'stats': st,
                     'params': p,
+                    'structure': structure.as_dict(),
+                    'used': {str(c): {k: q[k] for k in ('level', *simplify.LAYER_KEYS)} for c, q in used.items()},
+                    'play': play,
                 })
             if u.path == '/api/write':
                 s = self.state.song(body['i'])

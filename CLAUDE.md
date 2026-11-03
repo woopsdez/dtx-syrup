@@ -16,7 +16,7 @@ TubeDTX が作った Master 譜面（score.dtx）から Beginner / Easy を間�
 
 ## 構成
 - `dtx.py` 読み書き（cp932 / CRLF）。自分が書いたファイルは 2 行目に `; play-dtxmania` の印
-- `simplify.py` 間引きルール。試作の JS と同じ結果（Math.round 互換の丸め）
+- `simplify.py` 間引き（docs/simplify-theory.md 3 章の実装）: 本当の小節の格子を検出 → セクション・型・フィル → 層のマスク → 予算で層を剥がす。打点は動かさない
 - `songs.py` 走査・set.def・曲ごとの設定 `play_dtxmania.json`
 - `server.py` API と配信（音源は Range 対応）。`web/index.html` が UI（1 ファイル）
 - `tubedtx.py` URL → TubeDTX 一括変換 → Beginner / Easy
