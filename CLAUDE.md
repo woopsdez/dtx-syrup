@@ -26,7 +26,7 @@ DTXMania で遊ぶための道具。(1) 楽曲追加（YouTube → TubeDTX → �
 - `tubedtx.py` URL → TubeDTX 一括変換 → Beginner / Easy
 - `audio.py` bgm.ogg の長さ（Ogg のページを読む）。DTXMania は最後のチップで結果画面へ移るので、書くときは音源の終わりに無音チップ
   （曲フォルダの silence.wav、#WAVZZ、ch 61）を置いて歌が終わるまで演奏を続ける
-- 背景動画: DTXMania 4.15.1 の設定は「全画面 / 中央寄せ」の 2 択でオフが無い（動画のデコードが重い）。書く譜面から `#AVI` と ch 54 / 5A を外す（params `movie`、既定 False）
+- 背景動画: DTXMania 4.15.1 の設定は「全画面 / 中央寄せ」の 2 択でオフが無い（動画のデコードが重い）。外したい曲だけ書く譜面から `#AVI` と ch 54 / 5A を外せる（params `movie`、既定 True = 入れる。本人は演奏中の動画は残したい）
 - `records.py` DTXMania の `%LOCALAPPDATA%\DTXMania4\RecordDB.sqlite3`（譜面ごとに最後の 1 回だけ）を書き込み時に写し、
   曲の `dtx_syrup.json` の `plays[難易度]` に追記（時刻はローカル + 9h で入っているので戻す）
 - 間引きの考え方（セオリー・新ルール案）は `docs/simplify-theory.md`

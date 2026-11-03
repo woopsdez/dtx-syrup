@@ -386,7 +386,7 @@ def write_variant(song: Song, difficulty: str, params: dict | None = None, *, fo
             audio.write_silence(song.folder / SILENCE_NAME)
     text = dtx.render(song.master, kept, difficulty=difficulty, params=p,
                       dlevel=simplify.dlevel_for(kept, song.master.notes), end_time=end_time, silence=SILENCE_NAME,
-                      movie=bool(p.get('movie')))   # 背景動画は既定で入れない（DTXMania 4 にはオフの設定が無く、重い）
+                      movie=bool(p.get('movie', True)))   # 演奏中の背景動画（既定は入れる。外すと軽くなる）
     dtx.write(target, text)
     return {'ok': True, 'path': str(target), 'notes': len(kept), 'master': len(song.master.notes),
             'replaced': status == 'auto'}

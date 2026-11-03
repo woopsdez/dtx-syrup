@@ -50,7 +50,7 @@ LEVELS = [
 ]
 LAYER_KEYS = ('hh', 'kick', 'sd', 'toms', 'fill', 'chord', 'nps')
 DEFAULT_LEVEL = {'beginner': 2, 'easy': 4}
-DEFAULTS = {d: {'level': lv, 'ghost': True, 'movie': False, 'offsets': {}, **LEVELS[lv]} for d, lv in DEFAULT_LEVEL.items()}
+DEFAULTS = {d: {'level': lv, 'ghost': True, 'movie': True, 'offsets': {}, **LEVELS[lv]} for d, lv in DEFAULT_LEVEL.items()}
 HH_LADDER = ['off', '2', '4', '8', '16']
 KICK_LADDER = ['off', '1', 'on', 'sig', '8', 'all']
 SD_LADDER = ['24', 'on', 'all']
@@ -144,7 +144,7 @@ def normalize(params: dict | None, difficulty: str) -> dict:
     except (TypeError, ValueError):
         lv = DEFAULT_LEVEL[difficulty]
     lv = max(0, min(len(LEVELS) - 1, lv))
-    p = {'level': lv, 'ghost': True, 'movie': False, 'offsets': {}, **LEVELS[lv]}
+    p = {'level': lv, 'ghost': True, 'movie': True, 'offsets': {}, **LEVELS[lv]}
     ladders = {'hh': HH_LADDER, 'kick': KICK_LADDER, 'sd': SD_LADDER, 'fill': FILL_LADDER}
     for k, v in src.items():
         if k in ('ghost', 'toms', 'movie'):

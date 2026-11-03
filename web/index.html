@@ -385,8 +385,8 @@ const LAYER_OPTS = {
 };
 let LEVELS = []; // /api/songs の levels（simplify.LEVELS）
 let DEFAULTS = { // 難易度ごとの既定ルール。/api/songs の defaults（simplify.py）で上書きされる
-  beginner: { level: 2, hh: '4', kick: 'on', sd: '24', toms: false, fill: 'toms2', chord: 1, nps: 3, ghost: true, movie: false, offsets: {} },
-  easy: { level: 4, hh: '8', kick: '8', sd: 'all', toms: true, fill: '8', chord: 2, nps: 7, ghost: true, movie: false, offsets: {} },
+  beginner: { level: 2, hh: '4', kick: 'on', sd: '24', toms: false, fill: 'toms2', chord: 1, nps: 3, ghost: true, movie: true, offsets: {} },
+  easy: { level: 4, hh: '8', kick: '8', sd: 'all', toms: true, fill: '8', chord: 2, nps: 7, ghost: true, movie: true, offsets: {} },
 };
 const FILE = { beginner: 'score_beginner.dtx', easy: 'score_easy.dtx' };
 const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
@@ -705,7 +705,7 @@ function fillSelect(id, opts) { $(id).innerHTML = opts.map(([v, l]) => `<option 
 for (const k of ['hh', 'kick', 'sd', 'fill', 'nps']) fillSelect(`#p${k[0].toUpperCase()}${k.slice(1)}`, LAYER_OPTS[k]);
 function paramsToControls() {
   $('#pLevel').value = params.level; $('#pHh').value = params.hh; $('#pKick').value = params.kick; $('#pSd').value = params.sd;
-  $('#pFill').value = params.fill; $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost; $('#pMovie').checked = !!params.movie;
+  $('#pFill').value = params.fill; $('#pChord').value = params.chord; $('#pToms').checked = params.toms; $('#pGhost').checked = params.ghost; $('#pMovie').checked = params.movie !== false;
   const nps = $('#pNps'), v = String(+params.nps);
   if (![...nps.options].some((o) => o.value === v)) nps.add(new Option(`${v} 打`, v));
   nps.value = v;

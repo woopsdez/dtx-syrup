@@ -58,7 +58,7 @@ class EndChipTest(unittest.TestCase):
     def test_render_without_movie(self):
         master = dtx.parse_text(MASTER.replace('#BGMWAV: 01', '#BGMWAV: 01\r\n#AVI01: movie.mp4'))
         p = simplify.normalize(None, 'easy')
-        self.assertFalse(p['movie'])   # 既定は動画なし
+        self.assertTrue(p['movie'])    # 既定は動画あり（演奏中の背景動画は残す）
         kept, _ = simplify.simplify(master.notes, p, 2.0, master.max_bar)
         with_movie = dtx.render(master, kept, difficulty='easy', params=p, movie=True)
         self.assertIn('#AVI01: movie.mp4', with_movie)
