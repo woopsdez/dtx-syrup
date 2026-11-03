@@ -211,7 +211,7 @@ class RenderTest(unittest.TestCase):
 
 class SongsTest(unittest.TestCase):
     def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix='play-dtxmania-'))
+        self.tmp = Path(tempfile.mkdtemp(prefix='dtx-syrup-'))
         self.folder = self.tmp / 'テスト曲'
         make_song(self.folder)
 

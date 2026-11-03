@@ -15,7 +15,9 @@ from pathlib import Path
 
 ENCODING = 'cp932'
 EOL = '\r\n'
-MARKER = '; play-dtxmania'
+MARKER = '; dtx-syrup'
+LEGACY_MARKERS = ('; play-dtxmania',)   # 改名前（2026-11-03 まで）の印。読むときはどちらも自分の印とみなす
+MARKERS = (MARKER, *LEGACY_MARKERS)
 DATA_LINE = re.compile(r'^#(\d{3})([0-9A-Z]{2}):\s*([0-9A-Za-z]*)\s*$')
 HEADER_LINE = re.compile(r'^#([A-Za-z0-9_]+):\s*(.*?)\s*$')
 DRUM_CHANNELS = {'11', '12', '13', '14', '15', '16', '17', '18', '19', '1A', '1B', '1C'}
@@ -86,7 +88,7 @@ class Chart:
         return (bar - 1 + i / n) * self.beat_seconds()
 
     def is_generated(self) -> bool:
-        return any(MARKER in ln for ln in self.lines[:5])
+        return any(m in ln for ln in self.lines[:5] for m in MARKERS)
 
 
 def parse_text(text: str, path: Path | None = None) -> Chart:
@@ -127,9 +129,9 @@ def parse(path: Path) -> Chart:
 
 
 def is_generated_file(path: Path) -> bool:
-    """自分（play-dtxmania）が書いたファイルか。先頭 5 行の MARKER で判定。"""
+    """自分（DTX Syrup。改名前の play-dtxmania も）が書いたファイルか。先頭 5 行の印で判定。"""
     try:
-        return any(MARKER in ln for ln in read_text_guess(path).splitlines()[:5])
+        return any(m in ln for ln in read_text_guess(path).splitlines()[:5] for m in MARKERS)
     except OSError:
         return False
 
@@ -164,7 +166,7 @@ def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | 
             if m.group(2) not in DRUM_CHANNELS:
                 other_data[(int(m.group(1)), m.group(2))] = ln.rstrip()
             continue
-        if MARKER in ln:
+        if any(m in ln for m in MARKERS):
             continue  # 二重に印を付けない（生成物を入力にしたとき）
         header_lines.append(ln.rstrip())
 

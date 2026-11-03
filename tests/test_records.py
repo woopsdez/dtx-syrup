@@ -57,6 +57,14 @@ class RecordsTest(unittest.TestCase):
         self.assertEqual(records.ingest(songs.scan(self.tmp), self.db), [])
         self.assertEqual(len(json.loads((self.folder / songs.SETTINGS_NAME).read_text('utf-8'))['plays']['easy']), 1)
 
+    def test_legacy_settings_name_is_renamed(self):
+        old = self.folder / 'play_dtxmania.json'
+        old.write_text('{"title": "x"}', encoding='utf-8')
+        self.assertEqual(songs.load_settings(self.folder), {'title': 'x'})
+        self.assertFalse(old.exists())
+        self.assertTrue((self.folder / songs.SETTINGS_NAME).exists())
+        self.assertEqual(records.marker_params(self.folder / 'score_easy.dtx'), {'grid': 8})   # 改名前の印も読める
+
     def test_latest_and_normalize(self):
         self.assertEqual(records.normalize_path('\\\\?\\C:\\A\\b\\c.dtx'), records.normalize_path('c:/a/B/c.dtx'))
         self.assertEqual(records.latest({'plays': {'easy': [{'miss': 1}, {'miss': 2}], 'master': []}}),

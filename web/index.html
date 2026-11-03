@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>play-dtxmania</title>
+<title>DTX Syrup</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Inter:wght@500;600;700&display=swap">
 <style>
@@ -183,7 +183,7 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
 </style>
 
 <header class="top">
-  <div class="brand">play-dtxmania</div>
+  <div class="brand">DTX Syrup</div>
   <div class="status" id="status"></div>
 </header>
 <div class="main" id="main" data-view="list">
@@ -277,7 +277,7 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
       <button class="btn primary" id="writeBtn"></button>
       <button class="btn" id="applyAllBtn"></button>
     </div>
-    <p class="note">書くと曲フォルダに score_&lt;難易度&gt;.dtx と set.def ができ、DTXMania の次回起動で難易度が増えます。印の無い既存の譜面（手作り・別ツール）は上書きしません。使ったルールは曲ごとに play_dtxmania.json に残ります。</p>
+    <p class="note">書くと曲フォルダに score_&lt;難易度&gt;.dtx と set.def ができ、DTXMania の次回起動で難易度が増えます。印の無い既存の譜面（手作り・別ツール）は上書きしません。使ったルールは曲ごとに dtx_syrup.json に残ります。</p>
   </section>
 </div>
 <audio id="audio" preload="metadata"></audio>
@@ -323,7 +323,7 @@ const FILE = { beginner: 'score_beginner.dtx', easy: 'score_easy.dtx' };
 const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// 曲一覧はサーバーから。title / artist は songs.py が整えたもの（play_dtxmania.json で直せる）
+// 曲一覧はサーバーから。title / artist は songs.py が整えたもの（dtx_syrup.json で直せる）
 let songs = [];
 const detail = new Map(); // dir → { master: [[bar,ch,i,n,chip]], hand: { beginner?, easy? } }
 const wrapSong = (s) => ({ ...s, idx: s.i, mt: 240 / (s.bpm || 120), clean: s.title, cleanArtist: s.artist });
@@ -568,7 +568,7 @@ function levelToControls() { // レベルを変えたら層のスイッチをそ
   const lv = LEVELS[+$('#pLevel').value];
   if (lv) { params = { ...params, ...lv, level: +$('#pLevel').value }; paramsToControls(); }
 }
-function isGenerated(s, d) { return !!s.has[d]; } // 'auto'（play-dtxmania 製）か 'hand'（手作り・別ツール）
+function isGenerated(s, d) { return !!s.has[d]; } // 'auto'（DTX Syrup 製）か 'hand'（手作り・別ツール）
 const checkedSongs = () => songs.filter((s) => checked[s.dir]);
 function renderList() {
   $('#songs').innerHTML = songs.map((s, i) => `
@@ -638,7 +638,7 @@ const rulesFor = (s, d) => (s && s.rules && s.rules[d]) || DEFAULTS[d]; // 曲�
 function setDiff(d) {
   diff = d; params = { ...rulesFor(songs[cur], d) }; paramsToControls(); renderSong(); // タブ = 難易度ごとのルール
 }
-// 題名・アーティストの直し（曲フォルダの play_dtxmania.json に保存し、set.def にも反映）
+// 題名・アーティストの直し（曲フォルダの dtx_syrup.json に保存し、set.def にも反映）
 async function editTitle() {
   const s = songs[cur];
   const title = prompt('曲名（set.def の #TITLE になります）', s.clean);

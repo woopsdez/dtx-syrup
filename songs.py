@@ -1,4 +1,4 @@
-"""songlist の走査と、曲フォルダへの書き込み（score_beginner.dtx / score_easy.dtx / set.def / play_dtxmania.json）。"""
+"""songlist の走査と、曲フォルダへの書き込み（score_beginner.dtx / score_easy.dtx / set.def / dtx_syrup.json）。"""
 from __future__ import annotations
 
 import json
@@ -12,9 +12,10 @@ import dtx
 import simplify
 
 SILENCE_NAME = 'silence.wav'           # 終端の無音チップ用（write_variant が曲フォルダに作る）
-DEFAULT_SONGLIST = Path(os.environ.get('PLAY_DTXMANIA_SONGLIST', r'C:\Users\woops\Desktop\dtxmania-4.15.1\songlist'))
+DEFAULT_SONGLIST = Path(os.environ.get('DTX_SYRUP_SONGLIST', r'C:\Users\woops\Desktop\dtxmania-4.15.1\songlist'))
 CONFIG_NAME = 'tube_dtx_config.json'   # これがあるフォルダ = TubeDTX 製
-SETTINGS_NAME = 'play_dtxmania.json'   # 曲ごとの設定（題名の直し、難易度ごとのルール）
+SETTINGS_NAME = 'dtx_syrup.json'   # 曲ごとの設定（題名の直し、難易度ごとのルール、演奏の履歴）
+LEGACY_SETTINGS_NAME = 'play_dtxmania.json'   # 改名前の名前。見つけたら新しい名前に変える
 FILES = {'beginner': 'score_beginner.dtx', 'easy': 'score_easy.dtx'}
 LABELS = {'beginner': 'Beginner', 'easy': 'Easy', 'master': 'Master'}
 MEDIA = {'pre.jpg': 'image/jpeg', 'bgm.ogg': 'audio/ogg', 'pre.ogg': 'audio/ogg'}
@@ -64,6 +65,12 @@ def find_master(folder: Path) -> Path | None:
 
 def load_settings(folder: Path) -> dict:
     p = folder / SETTINGS_NAME
+    old = folder / LEGACY_SETTINGS_NAME
+    if not p.exists() and old.exists():
+        try:
+            old.replace(p)
+        except OSError:
+            p = old
     if not p.exists():
         return {}
     try:
@@ -77,7 +84,7 @@ def save_settings(folder: Path, data: dict) -> None:
 
 
 def variant_status(folder: Path, difficulty: str) -> str | None:
-    """None = 無い / 'auto' = play-dtxmania が書いた / 'hand' = それ以外（手作りや別ツール。上書きしない）。"""
+    """None = 無い / 'auto' = DTX Syrup が書いた / 'hand' = それ以外（手作りや別ツール。上書きしない）。"""
     p = folder / FILES[difficulty]
     if not p.exists():
         return None
@@ -136,7 +143,7 @@ class Song:
         return {d: variant_status(self.folder, d) for d in FILES}
 
     def hand_variants(self) -> dict[str, dtx.Chart]:
-        """play-dtxmania 以外が書いた既存の難易度譜面（比較用）。"""
+        """DTX Syrup 以外が書いた既存の難易度譜面（比較用）。"""
         out = {}
         for d, fn in FILES.items():
             p = self.folder / fn

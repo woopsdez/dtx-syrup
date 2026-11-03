@@ -2,7 +2,7 @@
 
 DTXMania 4 は結果画面のときに RecordDB.sqlite3 を書くが、譜面ごとに最後の 1 回しか残さない
 （判定数・最大コンボ・曲を 64 区間に割ったミスの地図。レーン別は無い）。
-ここでは DTXMania4 フォルダの書き込みを監視し、新しい記録を曲フォルダの play_dtxmania.json の
+ここでは DTXMania4 フォルダの書き込みを監視し、新しい記録を曲フォルダの dtx_syrup.json の
 plays[難易度] に追記する。監視は ReadDirectoryChangesW（書き込みがあったときだけ動く）。
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path
 import dtx
 import songs as songs_mod
 
-DTXMANIA_DATA = Path(os.environ.get('PLAY_DTXMANIA_DTXDATA') or (Path(os.environ.get('LOCALAPPDATA', '.')) / 'DTXMania4'))
+DTXMANIA_DATA = Path(os.environ.get('DTX_SYRUP_DTXDATA') or (Path(os.environ.get('LOCALAPPDATA', '.')) / 'DTXMania4'))
 RECORD_DB = 'RecordDB.sqlite3'
 COLUMNS = ('ScorePath', 'Timestamp', 'TotalNotes', 'Perfect', 'Great', 'Good', 'Ok', 'Miss', 'MaxCombo', 'CountMap',
            'AutoLeftCrash', 'AutoHiHat', 'AutoFoot', 'AutoSnare', 'AutoBass', 'AutoTom1', 'AutoTom2', 'AutoTom3', 'AutoRightCrash')
@@ -61,14 +61,15 @@ def read_records(db: Path) -> list[dict]:
 
 
 def marker_params(path: Path) -> dict | None:
-    """play-dtxmania が書いた譜面なら、2 行目の印からそのときのルールを取り出す。"""
+    """DTX Syrup が書いた譜面なら、2 行目の印からそのときのルールを取り出す。"""
     try:
         head = dtx.read_text_guess(path).splitlines()[:5]
     except OSError:
         return None
     for ln in head:
-        if ln.startswith(dtx.MARKER):
-            rest = ln[len(dtx.MARKER):].strip()
+        marker = next((m for m in dtx.MARKERS if ln.startswith(m)), None)
+        if marker:
+            rest = ln[len(marker):].strip()
             i = rest.find('{')
             if i >= 0:
                 try:
@@ -102,7 +103,7 @@ def difficulty_of(song: songs_mod.Song, filename: str) -> str | None:
 
 
 def ingest(found: list[songs_mod.Song], db: Path | None = None) -> list[tuple[songs_mod.Song, str, dict]]:
-    """新しい記録を各曲の play_dtxmania.json に追記し、追記した分を返す。"""
+    """新しい記録を各曲の dtx_syrup.json に追記し、追記した分を返す。"""
     db = db or (DTXMANIA_DATA / RECORD_DB)
     by_folder = {normalize_path(str(s.folder)): s for s in found}
     added = []

@@ -1,14 +1,14 @@
-"""play-dtxmania: TubeDTX の Master 譜面から Beginner / Easy を作り、ブラウザで確かめる。
+"""DTX Syrup: TubeDTX の Master 譜面から Beginner / Easy を作り、ブラウザで確かめる。
 
-python play_dtxmania.py                       # serve（既定）
-python play_dtxmania.py serve [--port 8767] [--no-browser]
-python play_dtxmania.py list                  # 曲と難易度の状態
-python play_dtxmania.py generate --missing    # 足りない難易度を既定ルールで書く
-python play_dtxmania.py generate "曲フォルダ名" [--diff beginner,easy]
-python play_dtxmania.py add <YouTube URL>     # TubeDTX → score.dtx → Beginner / Easy
-python play_dtxmania.py check                 # 置き場所と TubeDTX の確認
-python play_dtxmania.py log ["曲フォルダ名"]   # DTXMania の演奏記録を取り込んで曲ごとの履歴を出す
-共通: --songlist PATH（既定は Desktop の dtxmania-4.15.1/songlist、env PLAY_DTXMANIA_SONGLIST）
+python dtx_syrup.py                       # serve（既定）
+python dtx_syrup.py serve [--port 8767] [--no-browser]
+python dtx_syrup.py list                  # 曲と難易度の状態
+python dtx_syrup.py generate --missing    # 足りない難易度を既定ルールで書く
+python dtx_syrup.py generate "曲フォルダ名" [--diff beginner,easy]
+python dtx_syrup.py add <YouTube URL>     # TubeDTX → score.dtx → Beginner / Easy
+python dtx_syrup.py check                 # 置き場所と TubeDTX の確認
+python dtx_syrup.py log ["曲フォルダ名"]   # DTXMania の演奏記録を取り込んで曲ごとの履歴を出す
+共通: --songlist PATH（既定は Desktop の dtxmania-4.15.1/songlist、env DTX_SYRUP_SONGLIST）
 """
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def cmd_list(root: Path) -> int:
         st = s.status()
         mark = ''.join((d[0].upper() if st[d] == 'auto' else d[0] if st[d] == 'hand' else '-') for d in songs_mod.FILES)
         print(f'{i:3d} [{mark}] {s.title}  —  {s.artist or "?"}  (BPM {s.master.bpm:g}, {len(s.master.notes)} notes, {s.name})')
-    print(f'{len(found)} songs  ([B]/[E] = play-dtxmania 製, [b]/[e] = 手作り/別ツール, - = 無し)')
+    print(f'{len(found)} songs  ([B]/[E] = DTX Syrup 製, [b]/[e] = 手作り/別ツール, - = 無し)')
     return 0
 
 
@@ -111,7 +111,7 @@ def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
 
     srv = server.make_server(root, port)
     url = f'http://127.0.0.1:{port}/'
-    print('play-dtxmania:', url, ' songlist:', root, ' (Ctrl+C で終了)')
+    print('DTX Syrup:', url, ' songlist:', root, ' (Ctrl+C で終了)')
     if open_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
     try:
@@ -126,7 +126,7 @@ def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
 def main(argv: list[str] | None = None) -> int:
     common = argparse.ArgumentParser(add_help=False)  # --songlist はサブコマンドの前後どちらでも
     common.add_argument('--songlist', type=Path, default=None)
-    ap = argparse.ArgumentParser(prog='play_dtxmania', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, parents=[common])
+    ap = argparse.ArgumentParser(prog='dtx-syrup', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, parents=[common])
     sub = ap.add_subparsers(dest='cmd')
     p = sub.add_parser('serve', parents=[common])
     p.add_argument('--port', type=int, default=8767)
