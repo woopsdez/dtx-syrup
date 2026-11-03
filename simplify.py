@@ -448,6 +448,15 @@ def simplify_full(notes: list[Note], params: dict, bar_seconds: float = 0.0, max
             it = min(heads, key=lambda it: rank.get(it[1].ch, 9))
             keep[it[0]] = it[1]
 
+    # 締め: 曲の最後の位置にある打点（HH 以外）は必ず 1 つ残す
+    if by_bar:
+        tail = by_bar[max(by_bar)]
+        last_vs = max(it[2] for it in tail)
+        ends = [it for it in tail if it[2] == last_vs and it[1].ch != '11']
+        if ends and not any(it[0] in keep for it in ends):
+            it = min(ends, key=lambda it: rank.get(it[1].ch, 9))
+            keep[it[0]] = it[1]
+
     kept = [Kept(n.bar, n.ch, n.i, n.n, n.level, n.chip, idx) for idx, n in keep.items()]
     kept.sort(key=lambda k: (k.bar, k.slot / k.grid, rank.get(k.ch, 9)))
     removed = sorted((n.bar, n.ch, n.pos) for idx, n in enumerate(notes) if idx not in keep and n.ch in GROUP)

@@ -134,10 +134,27 @@ def is_generated_file(path: Path) -> bool:
         return False
 
 
-def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | None = None) -> str:
+_WAV_LINE = re.compile(r'^#WAV([0-9A-Za-z]{2})\s*:', re.IGNORECASE)
+END_CHANNEL = '61'   # 終端の無音チップを置く SE チャンネル
+
+
+def _free_wav_id(lines: list[str]) -> str:
+    used = {m.group(1).upper() for ln in lines if (m := _WAV_LINE.match(ln))}
+    digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    for n in range(len(digits) ** 2 - 1, 0, -1):   # ZZ から下へ
+        wid = digits[n // 36] + digits[n % 36]
+        if wid not in used:
+            return wid
+    return 'ZZ'
+
+
+def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | None = None,
+           end_time: float | None = None, silence: str = 'silence.wav') -> str:
     """間引き結果 kept（bar, ch, slot, grid, chip を持つ列）から DTX 本文を作る。
 
     ヘッダとドラム以外のデータ行は master をそのまま写す。ドラム行は kept から作り直す。
+    end_time（秒）を渡すと、最後の打点より後ろのその時刻に無音チップ（#WAV: silence）を置き、
+    DTXMania が音源の終わりまで演奏を続けるようにする（DTXMania は最後のチップで結果画面へ移る）。
     """
     header_lines: list[str] = []
     other_data: dict[tuple[int, str], str] = {}
@@ -165,6 +182,18 @@ def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | 
             inserted = True
     if not inserted:
         out.insert(0, marker)
+    end_chip = None
+    if end_time is not None and master.beat_seconds():
+        last = max([(k.bar - 1 + k.slot / k.grid) for k in kept], default=0.0) * master.beat_seconds()
+        if end_time > last:
+            wid = _free_wav_id(header_lines)
+            bar_f = 1 + end_time / master.beat_seconds()
+            bar, i = int(bar_f), int((bar_f - int(bar_f)) * 64 + 0.5)
+            if i >= 64:
+                bar, i = bar + 1, 0
+            end_chip = (bar, wid, i)
+            at = max((n for n, ln in enumerate(out) if _WAV_LINE.match(ln)), default=len(out) - 1)
+            out.insert(at + 1, f'#WAV{wid}: {silence}')
     # 末尾の空行を整える
     while out and out[-1] == '':
         out.pop()
@@ -184,6 +213,9 @@ def render(master: Chart, kept, *, difficulty: str, params: dict, dlevel: int | 
         for k in ks:
             slots[k.slot * g // k.grid] = k.chip
         data_lines[key] = f'#{key[0]:03d}{key[1]}: ' + ''.join(slots.get(s, '00') for s in range(g))
+    if end_chip:
+        bar, wid, i = end_chip
+        data_lines[(bar, END_CHANNEL)] = f'#{bar:03d}{END_CHANNEL}: ' + ''.join(wid if s == i else '00' for s in range(64))
     for key in sorted(data_lines):
         out.append(data_lines[key])
     out.append('')

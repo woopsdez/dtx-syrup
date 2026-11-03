@@ -20,6 +20,8 @@ TubeDTX が作った Master 譜面（score.dtx）から Beginner / Easy を間�
 - `songs.py` 走査・set.def・曲ごとの設定 `play_dtxmania.json`
 - `server.py` API と配信（音源は Range 対応）。`web/index.html` が UI（1 ファイル）
 - `tubedtx.py` URL → TubeDTX 一括変換 → Beginner / Easy
+- `audio.py` bgm.ogg の長さ（Ogg のページを読む）。DTXMania は最後のチップで結果画面へ移るので、書くときは音源の終わりに無音チップ
+  （曲フォルダの silence.wav、#WAVZZ、ch 61）を置いて歌が終わるまで演奏を続ける
 - `records.py` DTXMania の `%LOCALAPPDATA%\DTXMania4\RecordDB.sqlite3`（譜面ごとに最後の 1 回だけ）を書き込み時に写し、
   曲の `play_dtxmania.json` の `plays[難易度]` に追記（時刻はローカル + 9h で入っているので戻す）
 - 間引きの考え方（セオリー・新ルール案）は `docs/simplify-theory.md`

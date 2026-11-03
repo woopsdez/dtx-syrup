@@ -7,9 +7,11 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import audio
 import dtx
 import simplify
 
+SILENCE_NAME = 'silence.wav'           # 終端の無音チップ用（write_variant が曲フォルダに作る）
 DEFAULT_SONGLIST = Path(os.environ.get('PLAY_DTXMANIA_SONGLIST', r'C:\Users\woops\Desktop\dtxmania-4.15.1\songlist'))
 CONFIG_NAME = 'tube_dtx_config.json'   # これがあるフォルダ = TubeDTX 製
 SETTINGS_NAME = 'play_dtxmania.json'   # 曲ごとの設定（題名の直し、難易度ごとのルール）
@@ -107,6 +109,14 @@ class Song:
         return self.folder.name
 
     @property
+    def audio_seconds(self) -> float | None:
+        """bgm.ogg の長さ（秒）。無ければ None。"""
+        if not hasattr(self, '_audio_seconds'):
+            p = self.folder / 'bgm.ogg'
+            self._audio_seconds = audio.duration(p) if p.exists() else None
+        return self._audio_seconds
+
+    @property
     def raw_title(self) -> str:
         return self.master.header.get('TITLE', self.folder.name)
 
@@ -149,7 +159,7 @@ class Song:
             'bpm': m.bpm,
             'maxBar': m.max_bar,
             'bgmStart': m.bgm_start(),
-            'total': m.max_bar * m.beat_seconds(),
+            'total': max(m.max_bar * m.beat_seconds(), (m.bgm_start() + self.audio_seconds) if self.audio_seconds else 0.0),
             'master': self.master_path.name,
             'masterNotes': len(m.notes),
             'thumb': f'/media/{index}/pre.jpg' if (self.folder / 'pre.jpg').exists() else None,
@@ -187,8 +197,13 @@ def write_variant(song: Song, difficulty: str, params: dict | None = None, *, fo
         return {'ok': False, 'skipped': 'hand', 'path': str(target),
                 'message': f'{target.name} は手作り（または別ツール）の譜面なので上書きしません'}
     kept, _removed = simplify.simplify(song.master.notes, p, song.master.beat_seconds(), song.master.max_bar)
+    end_time = None
+    if song.audio_seconds:   # 音源の終わりまで演奏を続ける（終端の無音チップ）
+        end_time = song.master.bgm_start() + song.audio_seconds + 0.5
+        if not (song.folder / SILENCE_NAME).exists():
+            audio.write_silence(song.folder / SILENCE_NAME)
     text = dtx.render(song.master, kept, difficulty=difficulty, params=p,
-                      dlevel=simplify.dlevel_for(kept, song.master.notes))
+                      dlevel=simplify.dlevel_for(kept, song.master.notes), end_time=end_time, silence=SILENCE_NAME)
     dtx.write(target, text)
     return {'ok': True, 'path': str(target), 'notes': len(kept), 'master': len(song.master.notes),
             'replaced': status == 'auto'}
