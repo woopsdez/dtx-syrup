@@ -5,6 +5,7 @@
 3. kidonaru/TubeDTX を clone し、動作を確かめたコミットに合わせてサブモジュールも取る
 4. venv を作り、requirements.txt と 3 つのサブモジュール（pytube / magenta / pyfluidsynth）を入れる（約 3 GB）
 5. yt-dlp を最新に（古いと YouTube が 403 を返す）
+5'. 部品の版を、動作を確かめた環境（tubedtx-constraints.txt）に揃える
 6. TubeDTX の保存先（workspace_path）を songlist にし、DTX Syrup の設定に TubeDTX の場所を書く
 
 TubeDTX: https://github.com/kidonaru/TubeDTX（Apache-2.0、kidonaru 氏）。
@@ -31,13 +32,29 @@ STEPS = [   # (キー, 表示, 全体に占める %)
     ('git', 'git を用意', 3),
     ('clone', 'TubeDTX を取ってくる', 8),
     ('venv', 'TubeDTX 用の Python 環境を作る', 4),
-    ('pip', '部品を入れる（約 3 GB。いちばん長い）', 66),
+    ('pip', '部品を入れる（約 3 GB。いちばん長い）', 61),
+    ('pin', '動作を確かめた版に揃える', 5),
     ('modules', 'TubeDTX の部品（pytube / magenta / pyfluidsynth）を入れる', 9),
     ('ytdlp', 'yt-dlp を最新にする', 3),
     ('config', '保存先を設定', 3),
 ]
+CONSTRAINTS = Path(__file__).with_name('tubedtx-constraints.txt')   # 動いている TubeDTX の pip freeze（新しすぎる部品の食い違いを防ぐ）
 PIP_EXPECTED = 150   # requirements.txt で入る部品のおおよその数（「Collecting」の行数）
 _NOWIN = getattr(subprocess, 'CREATE_NO_WINDOW', 0)
+MAX_DIR_LEN = 60   # 部品の中に深いパスがあり、Windows の 260 文字制限に当たる（長いパス設定が無効のとき）
+
+
+def long_paths_enabled() -> bool:
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r'SYSTEM\CurrentControlSet\Control\FileSystem') as k:
+            return bool(winreg.QueryValueEx(k, 'LongPathsEnabled')[0])
+    except OSError:
+        return False
+
+
+def path_too_long(target: Path) -> bool:
+    return len(str(target)) > MAX_DIR_LEN and not long_paths_enabled()
 
 
 def find_python310() -> str | None:
@@ -96,6 +113,7 @@ def check(songlist: Path, target: Path | None = None) -> dict:
                     'ok': tubedtx.available()['ok'] and Path(tubedtx.TUBEDTX_DIR) == target},
         'songlist': {'path': str(songlist), 'exists': songlist.exists()},
         'dtxmania': {'exe': str(dtxmania), 'exists': dtxmania.exists()},
+        'pathTooLong': path_too_long(target),
         'diskFreeGB': round(free, 1) if free is not None else None,
         'needGB': 5,
     }
@@ -209,6 +227,9 @@ class Setup:
         self._emit(f'git: {self.git}')
 
     def _step_clone(self) -> None:
+        if path_too_long(self.target):
+            raise RuntimeError(f'入れ先の場所が長すぎます（{len(str(self.target))} 文字）。Windows の 260 文字制限で部品が入らないので、'
+                               f'{MAX_DIR_LEN} 文字以内の場所（例: C:\TubeDTX）を指定してください')
         if not (self.target / '.git').exists():
             if self.target.exists() and any(self.target.iterdir()):
                 raise RuntimeError(f'入れ先のフォルダが空ではありません: {self.target}')
@@ -226,6 +247,12 @@ class Setup:
     def _step_pip(self) -> None:
         self._pip_seen = 0
         self._sh([self.vpy, '-m', 'pip', 'install', '--upgrade', '-r', 'requirements.txt'], cwd=self.target, tries=3)
+
+    def _step_pin(self) -> None:
+        """requirements.txt は版の指定がゆるく、今入れると IPython と typing_extensions が食い違って TubeDTX が起動しない。
+        動作を確かめた環境と同じ版に揃える（--no-deps でそのまま入れる）。"""
+        if CONSTRAINTS.exists():
+            self._sh([self.vpy, '-m', 'pip', 'install', '--no-deps', '-r', str(CONSTRAINTS)], tries=3)
 
     def _step_modules(self) -> None:
         for sub, extra in (('pytube', []), ('magenta', ['--no-dependencies']), ('pyfluidsynth', [])):

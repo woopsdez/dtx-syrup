@@ -28,6 +28,7 @@ def main() -> int:
            '--name', 'DTX Syrup', '--icon', str(ROOT / 'assets' / 'icon.ico'),
            '--add-data', f'{ROOT / "web"}{SEP}web',
            '--add-data', f'{ROOT / "tubedtx_driver.py"}{SEP}.',
+           '--add-data', f'{ROOT / "tubedtx-constraints.txt"}{SEP}.',
            '--add-data', f'{ROOT / "assets" / "icon.ico"}{SEP}assets',
            '--distpath', str(ROOT / 'dist'), '--workpath', str(ROOT / 'build'), '--specpath', str(ROOT / 'build'),
            str(ROOT / 'dtx_syrup.py')]

@@ -1053,6 +1053,7 @@ function renderSetup(d) {
     line(d.tubedtx.ok, d.tubedtx.ok ? 'TubeDTX は使えます' : 'TubeDTX がまだありません', d.tubedtx.dir),
     line(!!c.python310, 'Python 3.10', c.python310 || (c.winget ? 'セットアップで自動で入れます' : '手で入れてください')),
     line(!!c.git, 'git', c.git || (c.winget ? 'セットアップで自動で入れます' : '手で入れてください')),
+    ...(c.pathTooLong ? [line(false, '入れ先の場所が長すぎます', '60 文字以内の場所にしてください（Windows の 260 文字制限）')] : []),
     line(c.diskFreeGB == null || c.diskFreeGB >= c.needGB, `空き容量 ${c.diskFreeGB ?? '?'} GB`, `${c.needGB} GB ほど使います`),
   ].join('');
   const running = j.state === 'running';
