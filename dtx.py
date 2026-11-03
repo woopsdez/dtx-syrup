@@ -18,8 +18,8 @@ EOL = '\r\n'
 MARKER = '; dtx-syrup'
 LEGACY_MARKERS = ('; play-dtxmania',)   # 改名前（2026-11-03 まで）の印。読むときはどちらも自分の印とみなす
 MARKERS = (MARKER, *LEGACY_MARKERS)
-DATA_LINE = re.compile(r'^#(\d{3})([0-9A-Z]{2}):\s*([0-9A-Za-z]*)\s*$')
-HEADER_LINE = re.compile(r'^#([A-Za-z0-9_]+):\s*(.*?)\s*$')
+DATA_LINE = re.compile(r'^#(\d{3})([0-9A-Z]{2})\s*:?\s*([0-9A-Za-z]*)\s*$')   # 古い配布譜面はコロン無し（#00111 0101）
+HEADER_LINE = re.compile(r'^#([A-Za-z0-9_]+)\s*:?\s*(.*?)\s*$')              # 同じく #BPM 180 の形がある
 DRUM_CHANNELS = {'11', '12', '13', '14', '15', '16', '17', '18', '19', '1A', '1B', '1C'}
 # TubeDTX は楽器ごとに 4 段階の強さでチップ番号を変える。基準番号を引くと 0〜3 の強さになる
 CHIP_BASE = {'11': 2, '12': 6, '13': 10, '14': 14, '15': 18, '17': 22, '16': 26}
@@ -63,9 +63,18 @@ class Chart:
     @property
     def bpm(self) -> float:
         try:
-            return float(self.header.get('BPM', '0') or 0)
+            v = float(self.header.get('BPM', '0') or 0)
         except ValueError:
-            return 0.0
+            v = 0.0
+        if not v:   # 配布譜面は #BPM を書かず #BPM01 + テンポ変化チャンネルだけのことがある。最初の定義を代表に
+            for k, val in self.header.items():
+                if len(k) == 5 and k.startswith('BPM'):
+                    try:
+                        v = float(val)
+                        break
+                    except ValueError:
+                        continue
+        return v
 
     @property
     def max_bar(self) -> int:
@@ -118,6 +127,8 @@ def read_text_guess(path: Path) -> str:
     """Shift_JIS が基本だが、手作りや他ツールのファイルが UTF-8 のことがある（例: らんま の set.def）。
     UTF-8 として厳密に読めればそれ、だめなら cp932。日本語の cp932 が UTF-8 として通ることはまず無い。"""
     data = path.read_bytes()
+    if data[:2] in (b'\xff\xfe', b'\xfe\xff'):   # DTXCreatorAL の配布譜面は UTF-16（BOM 付き）
+        return data.decode('utf-16')
     try:
         return data.decode('utf-8-sig')
     except UnicodeDecodeError:
