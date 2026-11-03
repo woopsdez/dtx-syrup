@@ -11,22 +11,33 @@ DTXMania で遊ぶための、趣味の道具です。譜面に「シロップ�
 
 > DTX Syrup は TubeDTX および DTXMania の作者とは無関係の非公式ツールです。趣味の範囲で、自己責任で使ってください。
 
+## 始め方（使うだけの人）
+1. [Releases](https://github.com/woopsdez/dtx-syrup/releases) から `DTX Syrup.exe` をダウンロードしてダブルクリック（Python は要りません）
+2. 最初に「設定とセットアップ」の画面が開きます
+   - **DTXMania の songlist**: DTXMania のフォルダの中の `songlist` を指定
+   - **TubeDTX を入れる**: ボタン 1 つで本家から取ってきて入れます（約 4 GB・15〜30 分。Python 3.10 と git が無ければ Windows の winget で入れます）
+3. 「＋ YouTube から作る」で曲を足して、DTXMania で遊ぶ
+
+止めるときは画面右上の「終了」。窓を閉じただけなら裏で動き続けます（再生リストの見張りのため）。
+
 ## 必要なもの
-- Windows 10 / 11、Python 3.10 以上（標準ライブラリだけで動きます）
-- [DTXMania 4](https://dtxmania.net/)（© FROM / Kenji Yamazaki）— 遊ぶ側。別途インストール
-- [TubeDTX](https://github.com/kidonaru/TubeDTX)（kidonaru 氏、Apache-2.0）— 楽曲追加に使う。別途インストールし、`setup.bat` で venv を作っておく（既定の場所は `C:\tools\TubeDTX`、環境変数 `TUBEDTX_DIR` で変更）
+- Windows 10 / 11
+- [DTXMania 4](https://dtxmania.net/)（© FROM / Kenji Yamazaki）— 遊ぶ側。公式サイトから入手
+- [TubeDTX](https://github.com/kidonaru/TubeDTX)（kidonaru 氏、Apache-2.0）— 楽曲追加に使う。上の「TubeDTX を入れる」か、自分で入れたものの場所を指定（環境変数 `TUBEDTX_DIR` でも可）
 - 電子ドラム（任意）。DTXMania 側でパッドの割り当てをしておく
 
-TubeDTX も DTXMania も、このリポジトリには含まれていません。
+TubeDTX も DTXMania も、このリポジトリと exe には含まれていません。設定は `%LOCALAPPDATA%\DTX Syrup` に置きます。
 
-## 始め方
+## 開発する人
 ```
 git clone https://github.com/woopsdez/dtx-syrup.git
 cd dtx-syrup
-python dtx_syrup.py
+python dtx_syrup.py          # ブラウザで開く（黒いウィンドウ付き）
+pythonw dtx_syrup.py app     # 黒いウィンドウ無し。アプリの窓で開く
+python dtx_syrup.py setup    # TubeDTX を自動で入れる（画面の「設定」と同じ）
+py -3.10 toolsuild_exe.py  # dist\DTX Syrup.exe を作る（PyInstaller）
 ```
-http://127.0.0.1:8767 が開きます。songlist の既定は `~/Desktop/dtxmania-4.15.1/songlist`、環境変数 `DTX_SYRUP_SONGLIST` か `--songlist` で変えられます。
-`dtx-syrup.cmd` をデスクトップのショートカットにしておくとコマンドを覚えなくて済みます。
+Python 3.10 以上・標準ライブラリだけ。テストは `python -m unittest discover -s tests`。
 
 ## 使い方
 - **曲を足す**: 曲リストの「＋ YouTube から作る」→ URL を貼るか曲名で検索 → サムネで試聴 → 「作る」。数分で Master / Beginner / Easy と set.def ができます

@@ -144,6 +144,28 @@ def cmd_app(root: Path, port: int) -> int:
     return 0
 
 
+def cmd_setup(root: Path, target: Path | None) -> int:
+    """TubeDTX を自動で入れる。進み具合を 1 行ずつ出す。"""
+    import setup_tubedtx
+
+    s = setup_tubedtx.Setup(root, target)
+    print('TubeDTX の入れ先:', s.target, ' songlist:', root)
+    s.start()
+    shown, last = 0, ''
+    while s.thread and s.thread.is_alive():
+        s.thread.join(2)
+        if s.log[shown:]:
+            for ln in s.log[shown:].splitlines():
+                if ln.startswith(('==', '!!', '>')):
+                    print(ln, flush=True)
+            shown = len(s.log)
+        if f'{s.step} {s.percent}' != last:
+            last = f'{s.step} {s.percent}'
+            print(f'  {s.percent:3d}% {s.step}', flush=True)
+    print('結果:', s.state, s.error)
+    return 0 if s.state == 'done' else 1
+
+
 def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
     import server
 
@@ -190,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('url')
     p.add_argument('--dry-run', action='store_true')
     sub.add_parser('check', parents=[common])
+    p = sub.add_parser('setup', parents=[common])   # TubeDTX を自動で入れる（画面の「設定」と同じ）
+    p.add_argument('--dir', type=Path, default=None)
     p = sub.add_parser('log', parents=[common])
     p.add_argument('names', nargs='*')
     a = ap.parse_args(argv)
@@ -206,6 +230,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_add(root, a.url, a.dry_run)
     if a.cmd == 'check':
         return cmd_check(root)
+    if a.cmd == 'setup':
+        return cmd_setup(root, a.dir)
     if a.cmd == 'log':
         return cmd_log(root, a.names)
     ap.print_help()

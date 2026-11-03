@@ -26,12 +26,25 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .brand .tag{font-family:var(--body);font-size:11px;font-weight:500;color:var(--accent-ink);background:var(--accent);border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:middle}
 .status{font-size:12px;color:var(--muted);text-align:right}
 .quit{margin-left:10px;flex:none}
+.gear{margin-left:10px;flex:none}
 @media(max-width:599px){.status{display:none}} /* 狭い画面ではヘッダを 1 行に保ち、1 画面目にタブまで収める */
 .main{display:grid;grid-template-columns:1fr;gap:16px;padding-block:12px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 /* 画面は 3 つ: list（曲リスト）/ song（1 曲のプレイヤー）/ make（YouTube から作る）。狭い画面では 1 つずつ、広い画面ではリスト + どちらか */
 .main[data-view="list"] .song,.main[data-view="list"] .make{display:none}
 .main[data-view="song"] .list,.main[data-view="song"] .make{display:none}
 .main[data-view="make"] .list,.main[data-view="make"] .song{display:none}
+.main[data-view="setup"] .list,.main[data-view="setup"] .song,.main[data-view="setup"] .make{display:none}
+.main:not([data-view="setup"]) .setup{display:none}
+.setup{min-width:0;max-width:782px;width:100%;justify-self:center;display:flex;flex-direction:column;gap:10px}
+.setup h2{margin:0;font-size:16px;font-weight:600}
+.setup .pl{margin:0}
+.setup .pl b{font-size:13px;color:var(--fg)}
+.setup .m{color:var(--muted)}
+.setup .ok{color:var(--good)}
+.setup .ng{color:#ff9d9d}
+.setup a{color:var(--fg)}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:3px}
+
 @media(min-width:960px){
   .main{grid-template-columns:320px minmax(0,1fr);align-items:start}
   .main[data-side="narrow"]{grid-template-columns:84px minmax(0,1fr)}
@@ -241,6 +254,7 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
 <header class="top">
   <div class="brand">DTX Syrup</div>
   <div class="status" id="status"></div>
+  <button class="btn small gear" id="setupBtn" title="設定とセットアップ">設定</button>
   <button class="btn small quit" id="quitBtn" title="DTX Syrup を終了">終了</button>
 </header>
 <div class="main" id="main" data-view="list">
@@ -288,6 +302,19 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
       <div class="results" id="results" hidden></div>
       <div class="pcol" id="ytSlot"></div>
     </div>
+  </section>
+  <section class="setup" id="setupView">
+    <div class="make-top"><button class="mback" id="setupBack" aria-label="戻る" title="戻る">←</button><h2>設定とセットアップ</h2></div>
+    <div class="pl"><b>DTXMania の songlist（曲フォルダの置き場）</b>
+      <form id="slForm"><input type="text" id="slPath" autocomplete="off" aria-label="songlist のフォルダ"><button class="btn small" type="submit">保存</button></form>
+      <div class="m" id="slInfo"></div></div>
+    <div class="pl"><b>TubeDTX（YouTube から譜面を作る部品）</b>
+      <ul class="checks" id="tdChecks"></ul>
+      <form id="tdForm"><input type="text" id="tdDir" autocomplete="off" aria-label="TubeDTX の入れ先"><button class="btn small" type="submit" id="tdBtn">TubeDTX を入れる（約 4 GB・15〜30 分）</button></form>
+      <div class="job" id="tdJob" hidden></div>
+      <div class="m">TubeDTX は kidonaru 氏のソフトです（<a href="https://github.com/kidonaru/TubeDTX" target="_blank" rel="noopener">GitHub</a>、Apache-2.0）。DTX Syrup には含まれていないので、本家から取ってきて入れます。Python 3.10 と git が無ければ Windows の winget で入れます。</div></div>
+    <div class="pl"><b>DTXMania</b><div class="m" id="dmInfo"></div>
+      <div class="m">本体は DTX Syrup に含まれていません。<a href="https://dtxmania.net/" target="_blank" rel="noopener">公式サイト</a>（© FROM / Kenji Yamazaki）から入手してください。</div></div>
   </section>
   <section class="song" id="songView">
     <div class="stage">
@@ -1012,6 +1039,59 @@ $('#quitBtn').addEventListener('click', async () => {
   document.body.innerHTML = '<p style="padding:40px;color:#8e8e96;font:14px sans-serif">DTX Syrup を終了しました。この窓は閉じてください。</p>';
   setTimeout(() => window.close(), 400);
 });
+// ---- 設定とセットアップ ----
+let setupTimer = 0, setupWas = 'idle';
+const setupOpenLog = { open: false };
+function line(ok, label, detail) { return `<li><span class="${ok ? 'ok' : 'ng'}">${ok ? '✓' : '✗'}</span> ${esc(label)}${detail ? ` <span class="m">${esc(detail)}</span>` : ''}</li>`; }
+function renderSetup(d) {
+  const c = d.check, j = d.job;
+  if (document.activeElement !== $('#slPath')) $('#slPath').value = c.songlist.path;
+  $('#slInfo').textContent = c.songlist.exists ? 'このフォルダの曲を一覧に出します。新しく作った曲もここに入ります' : 'フォルダがありません。DTXMania のフォルダの中の songlist を指定してください';
+  $('#slInfo').className = c.songlist.exists ? 'm' : 'ng';
+  if (document.activeElement !== $('#tdDir')) $('#tdDir').value = j.dir || c.tubedtx.dir;
+  $('#tdChecks').innerHTML = [
+    line(d.tubedtx.ok, d.tubedtx.ok ? 'TubeDTX は使えます' : 'TubeDTX がまだありません', d.tubedtx.dir),
+    line(!!c.python310, 'Python 3.10', c.python310 || (c.winget ? 'セットアップで自動で入れます' : '手で入れてください')),
+    line(!!c.git, 'git', c.git || (c.winget ? 'セットアップで自動で入れます' : '手で入れてください')),
+    line(c.diskFreeGB == null || c.diskFreeGB >= c.needGB, `空き容量 ${c.diskFreeGB ?? '?'} GB`, `${c.needGB} GB ほど使います`),
+  ].join('');
+  const running = j.state === 'running';
+  $('#tdBtn').disabled = running;
+  $('#tdBtn').textContent = running ? 'セットアップ中…' : d.tubedtx.ok ? 'TubeDTX を入れ直す / 部品を更新する' : 'TubeDTX を入れる（約 4 GB・15〜30 分）';
+  $('#dmInfo').innerHTML = c.dtxmania.exists ? `<span class="ok">✓</span> ${esc(c.dtxmania.exe)}` : '<span class="ng">✗</span> songlist の隣に dtxmania.exe が見つかりません';
+  const el = $('#tdJob');
+  el.hidden = j.state === 'idle';
+  if (!el.hidden) {
+    const log = (j.log || '').trim().split('\n').slice(-40).join('\n');
+    const title = running ? `${j.step} ${j.percent}%` : j.state === 'done' ? 'セットアップが終わりました' : `失敗: ${j.error}`;
+    el.dataset.state = j.state;
+    el.innerHTML = `<div class="job-h"><span>${running ? '⏳' : j.state === 'done' ? '✓' : '✗'}</span><span class="t">${esc(title)}</span>${running ? `<span class="pct">${j.percent}%</span>` : ''}</div>
+      ${running ? `<div class="bar det"><i style="width:${j.percent}%"></i></div>` : ''}
+      <details ${setupOpenLog.open ? 'open' : ''}><summary>ログ</summary><pre>${esc(log)}</pre></details>`;
+    el.querySelectorAll('details[open] pre').forEach((pre) => { pre.scrollTop = pre.scrollHeight; });
+  }
+  if (setupWas === 'running' && j.state !== 'running') { chime(j.state === 'done'); toast(j.state === 'done' ? 'TubeDTX のセットアップが終わりました' : `TubeDTX のセットアップに失敗: ${j.error}`); refreshSongs().then(renderList); }
+  setupWas = j.state;
+  clearTimeout(setupTimer);
+  if (running) setupTimer = setTimeout(loadSetup, 2000);
+}
+async function loadSetup(r) { try { renderSetup(r || await api('/api/setup')); } catch (e) { toast(`設定を読めません: ${e.message}`); } }
+$('#tdJob').addEventListener('toggle', (e) => { if (e.target.tagName === 'DETAILS') setupOpenLog.open = e.target.open; }, true);
+function openSetup() { closePreview(); loadSetup(); $('#main').dataset.view = 'setup'; }
+function closeSetup() { $('#main').dataset.view = window.innerWidth >= 960 ? 'song' : 'list'; }
+$('#setupBtn').addEventListener('click', openSetup);
+$('#setupBack').addEventListener('click', closeSetup);
+$('#slForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { renderSetup(await api('/api/setup', { songlist: $('#slPath').value })); await refreshSongs(); renderList(); toast('songlist を保存しました'); }
+  catch (err) { toast(err.message); }
+});
+$('#tdForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!confirm('TubeDTX を入れます。約 4 GB をダウンロードし、15〜30 分かかります。途中で DTX Syrup を終了しないでください。始めますか？')) return;
+  try { renderSetup(await api('/api/setup', { install: true, dir: $('#tdDir').value })); }
+  catch (err) { toast(err.message); }
+});
 function openMake() { loadPlaylists(); $('#main').dataset.view = 'make'; setTimeout(() => $('#ytUrl').focus(), 50); }
 function closeMake() { closePreview(); $('#main').dataset.view = window.innerWidth >= 960 ? 'song' : 'list'; }
 $('#makeBtn').addEventListener('click', openMake);
@@ -1091,6 +1171,7 @@ if (window.ResizeObserver) new ResizeObserver(() => drawAll()).observe($('#playe
 else window.addEventListener('resize', drawAll);
 
 (async function boot() {
+  try { const d = await api('/api/setup'); if (!d.tubedtx.ok || !d.check.songlist.exists) { renderSetup(d); $('#main').dataset.view = 'setup'; } } catch (e) { /* 設定は後で */ }
   try { await refreshSongs(); } catch (e) { $('#status').textContent = `読み込めません: ${e.message}`; return; }
   if (!songs.length) { $('#status').textContent = 'songlist に曲がありません'; renderList(); return; }
   params = { ...rulesFor(songs[cur], diff) }; paramsToControls();

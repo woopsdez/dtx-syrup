@@ -15,6 +15,8 @@ POST /api/favorite     {i, on} → ★（DTXFiles.★お気に入り へ移す /
 GET  /api/playlists   見張る再生リストと直近の確認結果
 POST /api/playlists   {url, box} 追加 / {remove: url} 削除 / {interval} 確認の間隔（分）
 POST /api/playlists/sync  今すぐ確認して、新しい動画をジョブに入れる
+GET  /api/setup       TubeDTX・songlist・Python などの確認と、セットアップの進み具合
+POST /api/setup       {songlist} 保存先を変える / {install: true, dir?} TubeDTX を自動で入れる
 POST /api/quit       サーバーを止める（アプリの窓の「終了」）
 GET  /media/N/name     曲フォルダの画像・音源（pre.jpg, bgm.ogg など。Range 対応）
 DTXMania が起動中のときは move / favorite を 409 で断る。
@@ -31,6 +33,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import boxes
 import playlist
+import setup_tubedtx
+import appconfig
 import records
 import simplify
 import songs as songs_mod
@@ -48,6 +52,7 @@ class State:
         self.rescan()
         self.records = records.Watcher(self)
         self.playlists = playlist.Syncer(self)
+        self.setup = setup_tubedtx.Setup(root)
         if watch_records:
             self.records.start()
             self.playlists.start()   # 再生リストを定期的に確かめて、新しい動画を譜面にする   # DTXMania が結果を書いたら曲ごとの履歴に写す
@@ -183,6 +188,9 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = playlist.load_config(self.state.playlists.path)
                 return self.send_json({'playlists': cfg['playlists'], 'interval': cfg['interval'],
                                        'last': self.state.playlists.last})
+            if u.path == '/api/setup':
+                return self.send_json({'check': setup_tubedtx.check(self.state.root), 'job': self.state.setup.as_dict(),
+                                       'tubedtx': tubedtx.available(), 'config': str(appconfig.FILE)})
             if u.path == '/api/jobs':
                 return self.send_json({'jobs': self.state.jobs.list()})
             if u.path == '/api/search':
@@ -315,6 +323,31 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get('url'):
                     syncer.wake.set()   # 足したらすぐ確認
                 return self.send_json({'playlists': cfg['playlists'], 'interval': cfg['interval'], 'last': syncer.last})
+            if u.path == '/api/setup':
+                st = self.state
+                if body.get('songlist'):
+                    p = setup_tubedtx.valid_dir(body['songlist'])
+                    if p is None:
+                        return self.send_json({'error': 'フォルダの場所として読めません'}, 400)
+                    if not p.exists() and not (p.parent / 'dtxmania.exe').exists():
+                        return self.send_json({'error': f'フォルダがありません: {p}（DTXMania の songlist フォルダを指定してください）'}, 400)
+                    p.mkdir(parents=True, exist_ok=True)
+                    appconfig.update(songlist=p)
+                    st.root = p
+                    st.setup.songlist = p
+                    st.rescan()
+                if body.get('install'):
+                    if st.setup.state == 'running':
+                        return self.send_json({'error': 'セットアップ中です'}, 409)
+                    if body.get('dir'):
+                        d = setup_tubedtx.valid_dir(body['dir'])
+                        if d is None:
+                            return self.send_json({'error': 'TubeDTX の入れ先として読めません'}, 400)
+                        st.setup.target = d
+                    st.setup.songlist = st.root
+                    st.setup.start()
+                return self.send_json({'check': setup_tubedtx.check(st.root, st.setup.target), 'job': st.setup.as_dict(),
+                                       'tubedtx': tubedtx.available()})
             if u.path == '/api/quit':   # 画面の「終了」。応答を返してからサーバーを止める
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return self.send_json({'ok': True})
