@@ -11,7 +11,7 @@ DTXMania で遊ぶための道具。(1) 楽曲追加（YouTube → TubeDTX → �
 - テスト: `python -m unittest discover -s tests -v`（songlist には触らない。一時フォルダにコピーして試す）
 
 ## 場所
-- songlist: `C:\Users\woops\Desktop\dtxmania-4.15.1\songlist`（env `DTX_SYRUP_SONGLIST` で変更）
+- songlist: 既定は `~/Desktop/dtxmania-4.15.1/songlist`（env `DTX_SYRUP_SONGLIST` か `--songlist` で変更）
 - TubeDTX: `C:\tools\TubeDTX`（`tubedtx.py` が venv の python で `tubedtx_driver.py` を回す）
 - 曲 = `set.def` か `*.dtx` があるフォルダ。箱 = songlist 直下の `DTXFiles.<名前>`（箱の中も、zip の包み紙も辿る。箱・包み紙ごと動かす）
 - TubeDTX 製の曲 = `tube_dtx_config.json` があるフォルダ。Master は `score_master.dtx` → `score.dtx` の順で探す。簡易化できるのはこれだけ
