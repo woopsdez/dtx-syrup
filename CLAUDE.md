@@ -5,7 +5,7 @@ TubeDTX が作った Master 譜面（score.dtx）から Beginner / Easy を間�
 
 ## 動かす
 - `python play_dtxmania.py`（= serve。http://127.0.0.1:8767 を開く）
-- `python play_dtxmania.py list` / `generate --missing` / `add <YouTube URL>` / `check`
+- `python play_dtxmania.py list` / `generate --missing` / `add <YouTube URL>` / `check` / `log`（演奏記録の履歴）
 - 標準ライブラリだけ。Python 3.10（システムの `python`）。TubeDTX の venv は `add` のときだけ使う
 - テスト: `python -m unittest discover -s tests -v`（songlist には触らない。一時フォルダにコピーして試す）
 
@@ -20,6 +20,9 @@ TubeDTX が作った Master 譜面（score.dtx）から Beginner / Easy を間�
 - `songs.py` 走査・set.def・曲ごとの設定 `play_dtxmania.json`
 - `server.py` API と配信（音源は Range 対応）。`web/index.html` が UI（1 ファイル）
 - `tubedtx.py` URL → TubeDTX 一括変換 → Beginner / Easy
+- `records.py` DTXMania の `%LOCALAPPDATA%\DTXMania4\RecordDB.sqlite3`（譜面ごとに最後の 1 回だけ）を書き込み時に写し、
+  曲の `play_dtxmania.json` の `plays[難易度]` に追記（時刻はローカル + 9h で入っているので戻す）
+- 間引きの考え方（セオリー・新ルール案）は `docs/simplify-theory.md`
 
 ## 守ること
 - 印の無い score_beginner / score_easy（手作り・別ツール）は絶対に上書きしない
