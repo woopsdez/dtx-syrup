@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import records
 import simplify
 import songs as songs_mod
 import tubedtx
@@ -29,12 +30,15 @@ WEB_DIR = Path(__file__).with_name('web')
 
 
 class State:
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, watch_records: bool = True):
         self.root = root
         self.lock = threading.Lock()
         self.songs: list[songs_mod.Song] = []
         self.jobs = tubedtx.Jobs(self)
         self.rescan()
+        self.records = records.Watcher(self)
+        if watch_records:
+            self.records.start()   # DTXMania が結果を書いたら曲ごとの履歴に写す
 
     def rescan(self) -> list[songs_mod.Song]:
         found = songs_mod.scan(self.root)
@@ -151,7 +155,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({'notes': {
                     'master': [n.as_list() for n in s.master.notes],
                     'hand': {d: [n.as_list() for n in c.notes] for d, c in s.hand_variants().items()},
-                }})
+                }, 'plays': s.settings.get('plays', {})})
             if u.path == '/api/jobs':
                 return self.send_json({'jobs': self.state.jobs.list()})
             if u.path == '/api/search':

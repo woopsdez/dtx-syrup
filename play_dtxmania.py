@@ -7,6 +7,7 @@ python play_dtxmania.py generate --missing    # 足りない難易度を既定�
 python play_dtxmania.py generate "曲フォルダ名" [--diff beginner,easy]
 python play_dtxmania.py add <YouTube URL>     # TubeDTX → score.dtx → Beginner / Easy
 python play_dtxmania.py check                 # 置き場所と TubeDTX の確認
+python play_dtxmania.py log ["曲フォルダ名"]   # DTXMania の演奏記録を取り込んで曲ごとの履歴を出す
 共通: --songlist PATH（既定は Desktop の dtxmania-4.15.1/songlist、env PLAY_DTXMANIA_SONGLIST）
 """
 from __future__ import annotations
@@ -17,6 +18,7 @@ import threading
 import webbrowser
 from pathlib import Path
 
+import records
 import songs as songs_mod
 import tubedtx
 
@@ -79,6 +81,31 @@ def cmd_check(root: Path) -> int:
     return 0
 
 
+def cmd_log(root: Path, names: list[str]) -> int:
+    """DTXMania の記録を取り込んで、曲ごとの履歴（直近 5 回まで）を出す。"""
+    found = songs_mod.scan(root)
+    added = records.ingest(found)
+    if added:
+        found = songs_mod.scan(root)   # 追記した分を読み直す
+    shown = 0
+    for s in found:
+        if names and s.name not in names and s.title not in names:
+            continue
+        plays = s.settings.get('plays', {})
+        if not any(plays.values()):
+            continue
+        print(s.title)
+        for d in ('beginner', 'easy', 'master'):
+            for pl in plays.get(d, [])[-5:]:
+                hit = pl['notes'] - pl['miss']
+                rate = hit / pl['notes'] * 100 if pl['notes'] else 0
+                auto = '  [auto]' if pl.get('auto') else ''
+                print(f"  {pl['at']}  {d:8s} {hit:4d}/{pl['notes']:<4d} ({rate:3.0f}%)  combo {pl['combo']:3d}{auto}")
+        shown += 1
+    print(f'{len(added)} 件を取り込み、{shown} 曲に記録あり')
+    return 0
+
+
 def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
     import server
 
@@ -113,6 +140,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('url')
     p.add_argument('--dry-run', action='store_true')
     sub.add_parser('check', parents=[common])
+    p = sub.add_parser('log', parents=[common])
+    p.add_argument('names', nargs='*')
     a = ap.parse_args(argv)
     root = a.songlist or songs_mod.DEFAULT_SONGLIST
     if a.cmd in (None, 'serve'):
@@ -125,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_add(root, a.url, a.dry_run)
     if a.cmd == 'check':
         return cmd_check(root)
+    if a.cmd == 'log':
+        return cmd_log(root, a.names)
     ap.print_help()
     return 2
 

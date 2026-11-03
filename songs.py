@@ -158,6 +158,7 @@ class Song:
             'videoId': self.video_id,
             'rules': {d: self.rules(d) for d in FILES},
             'customRules': {d: d in self.settings.get('rules', {}) for d in FILES},
+            'plays': {d: (pl[-1] if pl else None) for d, pl in self.settings.get('plays', {}).items()},  # 難易度ごとの直近の記録
         }
 
 
