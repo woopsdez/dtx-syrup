@@ -45,10 +45,10 @@ def progress(log: str, state: str, phase_i: int | None, phase_at: float | None, 
     start, expect = PHASE_PROGRESS[phase_i]
     end = PHASE_PROGRESS[phase_i + 1][0] if phase_i + 1 < len(PHASE_PROGRESS) else 99
     frac = min(0.95, max(0.0, ((now or time.time()) - (phase_at or time.time())) / expect))
-    if PHASES[phase_i][0] == 'separate_music_gr(':
-        seen = _TQDM.findall(log[log.rfind('separate_music_gr('):])
-        if seen:
-            frac = min(1.0, int(seen[-1]) / 100)
+    key = PHASES[phase_i][0]
+    seen = _TQDM.findall(log[log.rfind(key):]) if key in log else []
+    if seen:   # 段階の中に tqdm の % 表示（動画の変換・ドラム分離など）があればそれを使う
+        frac = min(1.0, int(seen[-1]) / 100)
     return int(start + (end - start) * frac)
 
 
