@@ -46,6 +46,8 @@ http://127.0.0.1:8767 が開きます。songlist の既定は `~/Desktop/dtxmani
 - [DTXMania](https://dtxmania.net/) — FROM / Kenji Yamazaki。DTX 形式と set.def の仕様に従って譜面を書きます
 - 調べた規約と界隈のマナーは [docs/project-policy.md](docs/project-policy.md) にまとめてあります
 
+- アイコン（ドラム柄のカップにシロップ、`assets/icon.*`）はこのプロジェクトのために描いたもので、MIT ライセンスに含まれます
+
 ## ライセンス
 MIT License — Copyright (c) 2026 woopsdez。[LICENSE](LICENSE)
 

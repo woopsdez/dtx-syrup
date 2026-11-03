@@ -36,3 +36,6 @@ dtx_syrup.json
 songlist/
 work/
 output/
+
+# アイコンの候補（AI 生成を含む。採用した icon.* だけ入れる）
+assets/icon/
