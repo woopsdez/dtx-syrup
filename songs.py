@@ -20,14 +20,24 @@ MEDIA = {'pre.jpg': 'image/jpeg', 'bgm.ogg': 'audio/ogg', 'pre.ogg': 'audio/ogg'
 _BRACKET = re.compile(r'\s*[\[【(（].*?[\]】)）]\s*')
 _QUOTED = re.compile(r'「([^」]+)」')
 _ARTIST_BEFORE_QUOTE = re.compile(r'[|｜│]\s*([^|｜│「]+?)\s*「')
+# 「…」が作品名のとき: 直前が「アニメ」「映画」など、または直後が「オープニングテーマ」「OP」など
+_WORK_BEFORE = re.compile(r'(アニメ|アニメーション|映画|劇場版|ドラマ|番組|ゲーム|作品|シリーズ)\s*$')
+_WORK_AFTER = re.compile(r'^\s*(オープニング|エンディング|主題歌|テーマ|挿入歌|イメージソング|OP|ED)')
 
 
 def clean_title(title: str, artist: str) -> str:
-    """YouTube の題名から曲名を取り出す。「…」があれば最後のそれ、無ければ括弧書きを落とす。"""
+    """YouTube の題名から曲名を取り出す。
+
+    「…」があればそれを曲名とみなす。複数あるときは、作品名と分かるもの
+    （アニメ「ポケットモンスター」エンディングテーマ、など）を除いた最後のもの。
+    「…」が無ければ括弧書きを落とす。
+    """
     joined = f'{title} {artist or ""}'
-    m = _QUOTED.findall(joined)
-    if m:
-        return m[-1]
+    quoted = list(_QUOTED.finditer(joined))
+    if quoted:
+        songs = [m for m in quoted
+                 if not _WORK_BEFORE.search(joined[:m.start()]) and not _WORK_AFTER.match(joined[m.end():])]
+        return (songs or quoted)[-1].group(1)
     t = re.sub(r'\s+', ' ', _BRACKET.sub(' ', title)).strip()
     return t or title
 

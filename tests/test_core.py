@@ -169,6 +169,17 @@ class SongsTest(unittest.TestCase):
         self.assertEqual(songs.clean_title('Some Song [Official MV]', 'Band'), 'Some Song')
         self.assertEqual(songs.clean_artist('Some Song [Official MV]', 'Band'), 'Band')
 
+    def test_clean_title_skips_work_name(self):
+        """「…」が 2 つあるとき、作品名（アニメ「…」エンディングテーマ）ではなく曲名を取る。"""
+        self.assertEqual(songs.clean_title('「バツグンタイプ」 アニメ「ポケットモンスター」エンディングテーマ', 'ポケモン公式YouTubeチャンネル'),
+                         'バツグンタイプ')
+        self.assertEqual(songs.clean_title('サトシ＆ゴウ「１・２・３」テレビアニメ「ポケットモンスター」オープニングテーマ', ''),
+                         '１・２・３')
+        self.assertEqual(songs.clean_title('アニメ「ワンピース」主題歌「ウィーアー！」', ''), 'ウィーアー！')
+        self.assertEqual(songs.clean_title('「推しの子」OP主題歌 YOASOBI「アイドル」', ''), 'アイドル')
+        # 作品名しか無いときは今まで通りそれを使う
+        self.assertEqual(songs.clean_title('TVアニメ「ジョジョの奇妙な冒険 黄金の風」 OP映像', ''), 'ジョジョの奇妙な冒険 黄金の風')
+
     def test_scan_and_generate(self):
         found = songs.scan(self.tmp)
         self.assertEqual(len(found), 1)
