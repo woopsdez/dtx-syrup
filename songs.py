@@ -7,13 +7,13 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import appconfig
 import audio
 import dtx
 import simplify
 
 SILENCE_NAME = 'silence.wav'           # 終端の無音チップ用（write_variant が曲フォルダに作る）
-DEFAULT_SONGLIST = (Path(os.environ['DTX_SYRUP_SONGLIST']) if os.environ.get('DTX_SYRUP_SONGLIST')   # env が優先。既定は ~/Desktop/dtxmania-4.15.1/songlist（個人のパスは書かない）
-                    else Path.home() / 'Desktop' / 'dtxmania-4.15.1' / 'songlist')
+DEFAULT_SONGLIST = appconfig.songlist()   # env DTX_SYRUP_SONGLIST > %LOCALAPPDATA%\DTX Syrup\config.json > ~/Desktop/dtxmania-4.15.1/songlist
 CONFIG_NAME = 'tube_dtx_config.json'   # これがあるフォルダ = TubeDTX 製
 SETTINGS_NAME = 'dtx_syrup.json'   # 曲ごとの設定（題名の直し、難易度ごとのルール、演奏の履歴）
 LEGACY_SETTINGS_NAME = 'play_dtxmania.json'   # 改名前の名前。見つけたら新しい名前に変える

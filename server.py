@@ -15,6 +15,7 @@ POST /api/favorite     {i, on} → ★（DTXFiles.★お気に入り へ移す /
 GET  /api/playlists   見張る再生リストと直近の確認結果
 POST /api/playlists   {url, box} 追加 / {remove: url} 削除 / {interval} 確認の間隔（分）
 POST /api/playlists/sync  今すぐ確認して、新しい動画をジョブに入れる
+POST /api/quit       サーバーを止める（アプリの窓の「終了」）
 GET  /media/N/name     曲フォルダの画像・音源（pre.jpg, bgm.ogg など。Range 対応）
 DTXMania が起動中のときは move / favorite を 409 で断る。
 """
@@ -314,6 +315,9 @@ class Handler(BaseHTTPRequestHandler):
                 if body.get('url'):
                     syncer.wake.set()   # 足したらすぐ確認
                 return self.send_json({'playlists': cfg['playlists'], 'interval': cfg['interval'], 'last': syncer.last})
+            if u.path == '/api/quit':   # 画面の「終了」。応答を返してからサーバーを止める
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return self.send_json({'ok': True})
             if u.path == '/api/playlists/sync':
                 if not tubedtx.available()['ok']:
                     return self.send_json({'error': f'TubeDTX が見つかりません: {tubedtx.TUBEDTX_DIR}'}, 400)

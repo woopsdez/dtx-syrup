@@ -15,8 +15,17 @@ import uuid
 from pathlib import Path
 from urllib.parse import parse_qsl, urlparse
 
-TUBEDTX_DIR = Path(os.environ.get('TUBEDTX_DIR', r'C:\tools\TubeDTX'))
+import appconfig  # noqa: E402
+
+TUBEDTX_DIR = appconfig.tubedtx_dir()   # env TUBEDTX_DIR > 設定 > C:\tools\TubeDTX（あれば）> %LOCALAPPDATA%\DTX Syrup\TubeDTX
 VENV_PYTHON = TUBEDTX_DIR / 'venv' / 'Scripts' / 'python.exe'
+
+
+def set_dir(path) -> None:
+    """TubeDTX の場所を切り替える（自動セットアップのあと）。他のモジュールは tubedtx.TUBEDTX_DIR を毎回読む。"""
+    global TUBEDTX_DIR, VENV_PYTHON
+    TUBEDTX_DIR = Path(path)
+    VENV_PYTHON = TUBEDTX_DIR / 'venv' / 'Scripts' / 'python.exe'
 DRIVER = Path(__file__).with_name('tubedtx_driver.py')
 
 # ログの行 → 今どの段階か。TubeDTX の debug_args が関数呼び出しを 1 行ずつ出すのを利用する

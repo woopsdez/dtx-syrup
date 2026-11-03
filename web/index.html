@@ -25,6 +25,7 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 .brand{font-family:var(--display);font-weight:700;font-size:18px;letter-spacing:.02em}
 .brand .tag{font-family:var(--body);font-size:11px;font-weight:500;color:var(--accent-ink);background:var(--accent);border-radius:4px;padding:1px 6px;margin-left:8px;vertical-align:middle}
 .status{font-size:12px;color:var(--muted);text-align:right}
+.quit{margin-left:10px;flex:none}
 @media(max-width:599px){.status{display:none}} /* 狭い画面ではヘッダを 1 行に保ち、1 画面目にタブまで収める */
 .main{display:grid;grid-template-columns:1fr;gap:16px;padding-block:12px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 /* 画面は 3 つ: list（曲リスト）/ song（1 曲のプレイヤー）/ make（YouTube から作る）。狭い画面では 1 つずつ、広い画面ではリスト + どちらか */
@@ -240,6 +241,7 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
 <header class="top">
   <div class="brand">DTX Syrup</div>
   <div class="status" id="status"></div>
+  <button class="btn small quit" id="quitBtn" title="DTX Syrup を終了">終了</button>
 </header>
 <div class="main" id="main" data-view="list">
   <section class="list" id="listView">
@@ -1003,6 +1005,12 @@ $('#plList').addEventListener('click', async (e) => {
     if (sync) { sync.disabled = true; sync.textContent = '確認中…'; const r = await api('/api/playlists/sync', {}); await loadPlaylists(); pollJobs();
       const n = r.playlists.reduce((a, p) => a + p.started.length, 0); toast(n ? `${n} 曲を作り始めました` : '新しい曲はありませんでした'); }
   } catch (err) { toast(err.message); loadPlaylists(); }
+});
+$('#quitBtn').addEventListener('click', async () => {
+  if (!confirm('DTX Syrup を終了しますか？（作っている途中の曲があれば止まります。再生リストの見張りも止まります）')) return;
+  try { await api('/api/quit', {}); } catch (e) { /* 止まりかけの応答は無視 */ }
+  document.body.innerHTML = '<p style="padding:40px;color:#8e8e96;font:14px sans-serif">DTX Syrup を終了しました。この窓は閉じてください。</p>';
+  setTimeout(() => window.close(), 400);
 });
 function openMake() { loadPlaylists(); $('#main').dataset.view = 'make'; setTimeout(() => $('#ytUrl').focus(), 50); }
 function closeMake() { closePreview(); $('#main').dataset.view = window.innerWidth >= 960 ? 'song' : 'list'; }

@@ -4,7 +4,7 @@
 まだ songlist に無い動画だけ TubeDTX のジョブに入れる。できた曲は指定の箱（DTXFiles.<名前>）へ移す。
 再生リストは「公開」か「限定公開」にしておく（yt-dlp はログインしないので非公開は読めない）。
 
-設定はリポジトリ直下の dtx_syrup.local.json（.gitignore 済み。個人の URL を公開リポジトリに入れない）:
+設定は %LOCALAPPDATA%\DTX Syrup\playlists.json（個人の URL を公開リポジトリに入れない）:
   {"playlists": [{"url": "...", "box": "こども"}], "interval": 15, "failed": {"<動画ID>": 回数}}
 """
 from __future__ import annotations
@@ -20,7 +20,10 @@ from urllib.parse import parse_qs, urlparse
 
 import tubedtx
 
-CONFIG = Path(os.environ.get('DTX_SYRUP_LOCAL') or Path(__file__).with_name('dtx_syrup.local.json'))
+import appconfig  # noqa: E402
+
+CONFIG = Path(os.environ.get('DTX_SYRUP_LOCAL') or appconfig.DIR / 'playlists.json')
+_LEGACY = Path(__file__).with_name('dtx_syrup.local.json')   # 2026-11-03 まではリポジトリ直下に置いていた
 DEFAULT_INTERVAL = 15          # 分
 MAX_FAILURES = 2               # 同じ動画は 2 回失敗したらもう試さない
 _LIST_ID = re.compile(r'^[A-Za-z0-9_-]{10,64}$')
@@ -41,6 +44,9 @@ def playlist_url(url: str) -> str:
 
 def load_config(path: Path | None = None) -> dict:
     p = path or CONFIG
+    if path is None and not p.exists() and _LEGACY.exists():
+        p.parent.mkdir(parents=True, exist_ok=True)
+        _LEGACY.replace(p)
     try:
         data = json.loads(p.read_text(encoding='utf-8'))
     except (OSError, ValueError):
@@ -52,6 +58,7 @@ def load_config(path: Path | None = None) -> dict:
 
 
 def save_config(data: dict, path: Path | None = None) -> None:
+    (path or CONFIG).parent.mkdir(parents=True, exist_ok=True)
     (path or CONFIG).write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding='utf-8')
 
 

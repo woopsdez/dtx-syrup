@@ -1,6 +1,7 @@
 """DTX Syrup: TubeDTX の Master 譜面から Beginner / Easy を作り、ブラウザで確かめる。
 
-python dtx_syrup.py                       # serve（既定）
+python dtx_syrup.py                       # serve（既定）。exe / pythonw からは app
+python dtx_syrup.py app                   # 黒いウィンドウ無し。アプリの窓で開き、画面の「終了」で止める
 python dtx_syrup.py serve [--port 8767] [--no-browser]
 python dtx_syrup.py list                  # 曲と難易度の状態
 python dtx_syrup.py generate --missing    # 足りない難易度を既定ルールで書く
@@ -111,6 +112,38 @@ def cmd_log(root: Path, names: list[str]) -> int:
     return 0
 
 
+def _log_to_file() -> None:
+    """pythonw / exe（コンソール無し）では print の行き先が無いので、%LOCALAPPDATA%\\DTX Syrup\\dtx-syrup.log に書く。"""
+    if sys.stdout is not None and sys.stderr is not None:
+        return
+    import appconfig
+    f = open(appconfig.log_file(), 'a', encoding='utf-8', buffering=1)  # noqa: SIM115 - 終了まで開いておく
+    sys.stdout = sys.stderr = f
+
+
+def cmd_app(root: Path, port: int) -> int:
+    """黒いウィンドウを出さずに動かし、画面はアプリの窓（Edge / Chrome の --app）で開く。止めるのは画面の「終了」。"""
+    import server
+    import window
+
+    _log_to_file()
+    url = f'http://127.0.0.1:{port}/'
+    try:
+        srv = server.make_server(root, port)
+    except OSError as e:
+        if getattr(e, 'winerror', None) == 10048 or getattr(e, 'errno', None) in (48, 98):
+            window.open_app(url)   # もう動いている。窓だけ開く
+            return 0
+        raise
+    print('DTX Syrup:', url, ' songlist:', root, flush=True)
+    threading.Timer(0.3, window.open_app, args=(url,)).start()
+    try:
+        srv.serve_forever()
+    finally:
+        srv.server_close()
+    return 0
+
+
 def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
     import server
 
@@ -137,12 +170,14 @@ def cmd_serve(root: Path, port: int, open_browser: bool) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    if hasattr(sys.stdout, 'reconfigure'):
+    if sys.stdout is not None and hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(errors='replace')   # cp932 のコンソールで題名の記号が出せなくても落ちない
     common = argparse.ArgumentParser(add_help=False)  # --songlist はサブコマンドの前後どちらでも
     common.add_argument('--songlist', type=Path, default=None)
     ap = argparse.ArgumentParser(prog='dtx-syrup', description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, parents=[common])
     sub = ap.add_subparsers(dest='cmd')
+    p = sub.add_parser('app', parents=[common])
+    p.add_argument('--port', type=int, default=8767)
     p = sub.add_parser('serve', parents=[common])
     p.add_argument('--port', type=int, default=8767)
     p.add_argument('--no-browser', action='store_true')
@@ -159,6 +194,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument('names', nargs='*')
     a = ap.parse_args(argv)
     root = a.songlist or songs_mod.DEFAULT_SONGLIST
+    if a.cmd == 'app' or (a.cmd is None and (getattr(sys, 'frozen', False) or sys.stdout is None)):
+        return cmd_app(root, getattr(a, 'port', 8767))   # exe / pythonw から引数なしで起動したとき
     if a.cmd in (None, 'serve'):
         return cmd_serve(root, getattr(a, 'port', 8767), not getattr(a, 'no_browser', False))
     if a.cmd == 'list':
