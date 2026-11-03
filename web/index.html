@@ -33,25 +33,68 @@ button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid 
 @media(min-width:960px){
   .main{grid-template-columns:320px minmax(0,1fr);align-items:start}
   .main[data-side="narrow"]{grid-template-columns:84px minmax(0,1fr)}
-  .main[data-view] .list{display:block}
+  .main[data-view] .list{display:flex}
   .main[data-view="list"] .song{display:block}
   .list{position:sticky;top:64px}
   .back{display:none}
   .list-head .side{display:grid}
   /* 畳んだサイドバー: サムネだけの帯。B/E は 6px の点になる。チェックと一括ボタンは隠す */
-  .main[data-side="narrow"] .list-title h2,.main[data-side="narrow"] .sel,.main[data-side="narrow"] #batchBtn{display:none}
+  .main[data-side="narrow"] .list-title h2,.main[data-side="narrow"] .sel,.main[data-side="narrow"] .bulk,.main[data-side="narrow"] .q,.main[data-side="narrow"] .filters,.main[data-side="narrow"] .fav{display:none}
   .main[data-side="narrow"] .list-title{justify-content:center}
   .main[data-side="narrow"] .row{padding:4px}
   .main[data-side="narrow"] .open{grid-template-columns:1fr;justify-items:center;gap:4px;padding:0}
   /* 畳んだ帯ではスクロールバーを出さない（右だけ余白が狭くなり、サムネと » の中心もずれるため）。ホイール・ドラッグで送れる */
-  .main[data-side="narrow"] .songs{max-height:calc(100vh - 120px);scrollbar-width:none}
+  .main[data-side="narrow"] .songs{scrollbar-width:none}
+  .main[data-side="narrow"] .bh{padding:8px 2px 0;justify-content:center;font-size:9px;letter-spacing:0}
+  .main[data-side="narrow"] .bh .n,.main[data-side="narrow"] .bh .f{display:none}
   .main[data-side="narrow"] .songs::-webkit-scrollbar{display:none}
   .main[data-side="narrow"] .meta,.main[data-side="narrow"] .mk .lbl,.main[data-side="narrow"] #jobsMini{display:none}
   .main[data-side="narrow"] .mk{width:36px;padding:6px 0}
 }
 .side{display:none;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);place-items:center;color:var(--muted);font-size:11px}
 h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0}
-.list-head{display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+/* サイドバー = 見出し類（固定）+ 曲リスト（残りの高さでスクロール） */
+.list{display:flex;flex-direction:column;max-height:calc(100dvh - 76px - env(safe-area-inset-top,0px))}
+.list-head{flex:none;display:flex;flex-direction:column;gap:8px;margin-bottom:8px}
+.q{width:100%;min-width:0;font:inherit;font-size:12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.q::placeholder{color:var(--muted)}
+.q::-webkit-search-cancel-button{filter:invert(.7)}
+/* 箱 / 絞り込み / 並べ替え / 昇降。狭い幅でも 1 行に収まるよう文字は短く */
+.filters{display:grid;grid-template-columns:1fr 1fr 1fr 30px;gap:6px}
+.filters select{min-width:0;width:100%;font:inherit;font-size:12px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:5px 4px;text-overflow:ellipsis}
+.filters .dir{height:30px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:14px;display:grid;place-items:center}
+.bulk{display:flex;gap:6px}
+.bulk .primary{flex:1;min-width:0;padding:8px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bulk #moveBtn{flex:none;padding:8px 10px}
+.bulk #moveBtn:disabled{opacity:.5}
+/* 箱の見出し（押すと畳む）。行と同じ左余白に揃える */
+.songs .box{list-style:none}
+.bh{width:100%;display:flex;align-items:baseline;gap:6px;padding:10px 6px 2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);text-align:left;border-radius:6px}
+.bh .bn{min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:700}
+.bh .n{font-variant-numeric:tabular-nums}
+.bh .f{margin-left:auto;font-size:13px;line-height:1}
+.songs .box:first-child .bh{padding-top:2px}
+.empty{font-size:12px;color:var(--muted);padding:8px 6px}
+/* ★（お気に入り = DTXFiles.★お気に入り の箱）。黄色は使わない。点いていれば白、消えていれば薄い ☆ */
+.fav{flex:none;width:28px;height:28px;border-radius:8px;color:var(--muted);font-size:15px;line-height:1;display:grid;place-items:center}
+.fav[aria-pressed="true"]{color:var(--fg)}
+/* TubeDTX 製でない曲: B/E の点の代わりに譜面の数（点の行と同じ高さ） */
+.lv{font-size:9px;line-height:7px;color:var(--muted);white-space:nowrap;letter-spacing:.02em}
+/* 箱へ移すダイアログ */
+.dlg{border:0;border-radius:12px;background:var(--panel);color:var(--fg);padding:16px;width:min(92vw,360px);box-shadow:0 12px 40px rgba(0,0,0,.6)}
+.dlg::backdrop{background:rgba(0,0,0,.55)}
+.dlg h3{margin:0 0 10px;font-size:14px;font-weight:700}
+.choices{display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow-y:auto;margin-bottom:10px;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.choices label{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:8px;cursor:pointer}
+.choices label:has(input:checked){background:var(--panel2)}
+.choices input{width:15px;height:15px;margin:0;accent-color:var(--accent);flex:none}
+.choices .cnt{margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.dlg .q{margin-bottom:12px}
+.dlg-actions{display:flex;justify-content:flex-end;gap:8px}
+/* TubeDTX 製でない曲の画面: 譜面の表示だけ（難易度タブ・調整・書くボタンは出さない） */
+.song[data-tube="false"] .toggles,.song[data-tube="false"] .ctrl,.song[data-tube="false"] details.params,.song[data-tube="false"] #actions,.song[data-tube="false"] .note.gen{display:none}
+#roNote{display:none}
+.song[data-tube="false"] #roNote{display:block}
 .list-title{display:flex;align-items:center;gap:8px}
 .list-title h2{flex:1}
 .btn.wide{width:100%;padding:8px 10px}
@@ -61,7 +104,7 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-weight:700}
 .btn.small{padding:5px 9px;font-size:12px}
 .btn:disabled{opacity:.5;cursor:default}
-.songs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 216px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.songs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;flex:1 1 auto;min-height:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
 .songs::-webkit-scrollbar{width:6px}.songs::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px}.songs::-webkit-scrollbar-track{background:transparent}
 /* 行 = 畳んだ帯と同じカード（サムネ + 下に B/E の点）。開いたときはその右に曲名が付くだけ */
 .row{display:flex;align-items:center;gap:4px;padding:4px 8px 4px 4px;border-radius:10px;border:1px solid transparent} /* 行に背景は敷かない。黒の上にサムネと文字だけ。選択中は枠線 */
@@ -123,7 +166,7 @@ h2{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute
 .meta{min-width:0}
 .meta .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .meta .s{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.chips{display:flex;gap:5px;justify-content:center}
+.chips{display:flex;gap:5px;justify-content:center;align-items:center;height:7px}
 .chip{width:7px;height:7px;border-radius:50%;border:1px solid #3c3c43;background:transparent}
 .chip.on{background:var(--good);border-color:transparent}
 .song{min-width:0;max-width:782px;width:100%;justify-self:center} /* 曲名帯からボタンまで全部を同じ幅に。レーンはこの幅いっぱい（5 本で約 156px ずつ） */
@@ -190,11 +233,27 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
   <section class="list" id="listView">
     <div class="list-head">
       <div class="list-title">
-        <label class="sel"><input type="checkbox" id="selAll" aria-label="全曲をチェック / 外す"></label>
+        <label class="sel"><input type="checkbox" id="selAll" aria-label="表示中の曲をチェック / 外す"></label>
         <h2>Song list</h2>
         <button class="side" id="sideBtn" aria-label="サイドバーを畳む" title="サイドバーを畳む">«</button>
       </div>
-      <button class="btn primary small wide" id="batchBtn"></button>
+      <input class="q" type="search" id="q" placeholder="曲名・アーティストで探す" aria-label="曲名・アーティストで探す" autocomplete="off">
+      <div class="filters">
+        <select id="fBox" aria-label="箱" title="箱"></select>
+        <select id="fFilter" aria-label="絞り込み" title="絞り込み">
+          <option value="all">すべて</option><option value="missing">難易度が足りない</option><option value="done">Beginner・Easy あり</option>
+          <option value="played">遊んだ</option><option value="unplayed">未プレイ</option><option value="fav">★ お気に入り</option><option value="tube">TubeDTX 製</option>
+        </select>
+        <select id="fSort" aria-label="並べ替え" title="並べ替え">
+          <option value="title">曲名</option><option value="artist">アーティスト</option><option value="bpm">BPM</option>
+          <option value="added">追加日</option><option value="played">最後に遊んだ日</option><option value="miss">直近のミス率</option>
+        </select>
+        <button class="dir" id="fDir" aria-label="昇順 / 降順" title="昇順 / 降順">↑</button>
+      </div>
+      <div class="bulk">
+        <button class="btn primary small" id="batchBtn"></button>
+        <button class="btn small" id="moveBtn" title="チェックした曲のフォルダを箱（DTXFiles.名前）へ移す">箱へ移す</button>
+      </div>
       <button class="btn small wide mk" id="makeBtn" title="YouTube から作る"><b>＋</b><span class="lbl"> YouTube から作る</span></button>
       <button class="jobs-mini" id="jobsMini" hidden title="開いて確認"></button>
     </div>
@@ -277,11 +336,20 @@ legend{font-size:11px;letter-spacing:.06em;color:var(--muted);padding:0 4px}
       <button class="btn primary" id="writeBtn"></button>
       <button class="btn" id="applyAllBtn"></button>
     </div>
-    <p class="note">書くと曲フォルダに score_&lt;難易度&gt;.dtx と set.def ができ、DTXMania の次回起動で難易度が増えます。印の無い既存の譜面（手作り・別ツール）は上書きしません。使ったルールは曲ごとに dtx_syrup.json に残ります。</p>
+    <p class="note gen">書くと曲フォルダに score_&lt;難易度&gt;.dtx と set.def ができ、DTXMania の次回起動で難易度が増えます。印の無い既存の譜面（手作り・別ツール）は上書きしません。使ったルールは曲ごとに dtx_syrup.json に残ります。</p>
+    <p class="note" id="roNote">この曲は TubeDTX 製ではないので、DTX Syrup では簡易化しません（一番上の難易度を表示するだけ。シンバルとテンポ変化は省いています）。★ と箱への移動はできます。</p>
   </section>
 </div>
 <audio id="audio" preload="metadata"></audio>
 <div class="toast" id="toast" role="status"></div>
+<dialog class="dlg" id="moveDlg">
+  <form id="moveForm">
+    <h3 id="moveTitle"></h3>
+    <div class="choices" id="moveChoices"></div>
+    <input class="q" type="text" id="moveNew" placeholder="新しい箱の名前（入れるとこちらを使う）" aria-label="新しい箱の名前" autocomplete="off">
+    <div class="dlg-actions"><button class="btn small" type="button" id="moveCancel">やめる</button><button class="btn primary small" type="submit">移す</button></div>
+  </form>
+</dialog>
 
 <script>
 const $ = (s) => document.querySelector(s);
@@ -324,25 +392,95 @@ const hue = (s) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // 曲一覧はサーバーから。title / artist は songs.py が整えたもの（dtx_syrup.json で直せる）
-let songs = [];
-const detail = new Map(); // dir → { master: [[bar,ch,i,n,chip]], hand: { beginner?, easy? } }
+// 箱 = DTXMania の DTXFiles.<名前> フォルダ。お気に入り（★）も箱の 1 つ（曲フォルダを動かす）
+let songs = [], boxes = [], FAV_BOX = '★お気に入り';
+const detail = new Map(); // rel → { master: [[bar,ch,i,n,chip]], hand: { beginner?, easy? } }
 const wrapSong = (s) => ({ ...s, idx: s.i, mt: 240 / (s.bpm || 120), clean: s.title, cleanArtist: s.artist });
 function applySongs(list) {
-  const curDir = songs[cur] && songs[cur].dir;
+  const prev = songs[cur];
   songs = list.map(wrapSong);
-  if (curDir) { const i = songs.findIndex((s) => s.dir === curDir); cur = i < 0 ? 0 : i; }
-  for (const s of songs) if (!(s.dir in checked)) checked[s.dir] = !s.has.beginner || !s.has.easy; // 初期チェック = 難易度が足りない曲
+  if (prev) { // 同じ曲を選んだままにする。箱へ移すと rel が変わるので、そのときはフォルダ名で探す
+    let i = songs.findIndex((s) => s.rel === prev.rel);
+    if (i < 0) i = songs.findIndex((s) => s.dir === prev.dir);
+    cur = i < 0 ? 0 : i;
+    if (songs[cur] && songs[cur].audio !== prev.audio) loadSong(); // 番号がずれて音源の URL が変わった
+  }
+  for (const s of songs) if (!(s.dir in checked)) checked[s.dir] = s.tube && (!s.has.beginner || !s.has.easy); // 初期チェック = 難易度が足りない曲
+}
+function applyListing(d) { // /api/songs と、書く・移す・★ の応答は同じ形（songs / boxes / favoriteBox）
+  if (d.boxes) boxes = d.boxes;
+  if (d.favoriteBox) FAV_BOX = d.favoriteBox;
+  applySongs(d.songs);
+  fillBoxSelect();
 }
 async function refreshSongs() {
   const d = await api('/api/songs');
   if (d.defaults) DEFAULTS = d.defaults;
   if (d.levels) LEVELS = d.levels;
   tubedtxInfo = d.tubedtx || null;
-  applySongs(d.songs);
+  applyListing(d);
 }
 async function loadDetail(s) {
-  if (!detail.has(s.dir)) detail.set(s.dir, (await api(`/api/song?i=${s.idx}`)).notes);
-  return detail.get(s.dir);
+  if (!detail.has(s.rel)) detail.set(s.rel, (await api(`/api/song?i=${s.idx}`)).notes);
+  return detail.get(s.rel);
+}
+
+// ---- 曲リストの検索・絞り込み・並べ替え・畳んだ箱（localStorage pd.list に覚える） ----
+const PREF_KEY = 'pd.list';
+const prefs = Object.assign({ box: '*', filter: 'all', sort: 'title', dir: 'asc', folded: {} }, (() => { try { return JSON.parse(localStorage.getItem(PREF_KEY)) || {}; } catch (e) { return {}; } })());
+function savePrefs() { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) { /* 保存できない環境でも動く */ } }
+let query = '';
+const norm = (v) => String(v || '').normalize('NFKC').toLowerCase();
+function matches(s) {
+  if (query && ![s.clean, s.cleanArtist, s.dir, s.rawTitle].some((v) => norm(v).includes(query))) return false;
+  if (prefs.box !== '*' && s.box !== prefs.box) return false;
+  switch (prefs.filter) {
+    case 'missing': return s.tube && (!s.has.beginner || !s.has.easy);
+    case 'done': return !!(s.has.beginner && s.has.easy);
+    case 'played': return s.playCount > 0;
+    case 'unplayed': return !s.playCount;
+    case 'fav': return s.fav;
+    case 'tube': return s.tube;
+    default: return true;
+  }
+}
+const SORT_KEYS = { title: (s) => s.clean, artist: (s) => s.cleanArtist, bpm: (s) => s.bpm, added: (s) => s.added, played: (s) => s.lastPlayed, miss: (s) => s.missRate };
+const SORT_DEFAULT_DIR = { title: 'asc', artist: 'asc', bpm: 'asc', added: 'desc', played: 'desc', miss: 'desc' }; // 日付とミス率は新しい・大きい順が自然
+function compare(a, b) {
+  const key = SORT_KEYS[prefs.sort] || SORT_KEYS.title, va = key(a), vb = key(b);
+  const na = va == null || va === '', nb = vb == null || vb === '';
+  if (na || nb) return na && nb ? a.clean.localeCompare(b.clean, 'ja') : na - nb; // 値が無い曲は昇降に関わらず最後
+  let c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'ja');
+  if (prefs.dir === 'desc') c = -c;
+  return c || a.clean.localeCompare(b.clean, 'ja');
+}
+const visibleSongs = () => songs.filter(matches);
+const boxLabel = (name) => (name === '' ? '箱なし' : name);
+function groupsFor(list) { // ★お気に入り → 箱なし → 箱（名前順）。曲が 1 つも無い箱は出さない
+  const order = [FAV_BOX, '', ...boxes.map((b) => b.name).filter((n) => n !== FAV_BOX)];
+  const names = [...new Set([...order, ...list.map((s) => s.box)])];
+  return names.map((name) => ({ name, songs: list.filter((s) => s.box === name) })).filter((g) => g.songs.length);
+}
+const fmtDate = (v) => { const d = new Date(typeof v === 'number' ? v * 1000 : String(v).replace(' ', 'T')); return isNaN(d) ? '—' : `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`; };
+function metaLine(s) { // 2 行目: アーティスト + 並べ替えに使っている値
+  const a = s.cleanArtist || '—';
+  switch (prefs.sort) {
+    case 'added': return `${a} · 追加 ${fmtDate(s.added)}`;
+    case 'played': return `${a} · ${s.lastPlayed ? `遊んだ ${fmtDate(s.lastPlayed)}` : '未プレイ'}`;
+    case 'miss': return `${a} · ${s.missRate == null ? '記録なし' : `ミス ${Math.round(s.missRate * 100)}%`}`;
+    default: return `${a} · BPM ${Math.round(s.bpm)}`;
+  }
+}
+function fillBoxSelect() {
+  const sel = $('#fBox');
+  const opts = [['*', '箱: すべて'], ['', '箱なし'], ...boxes.map((b) => [b.name, `${b.name} (${b.count})`])];
+  if (prefs.box !== '*' && !opts.some(([v]) => v === prefs.box)) prefs.box = '*';
+  sel.innerHTML = opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+  sel.value = prefs.box;
+}
+function syncControls() {
+  $('#fFilter').value = prefs.filter; $('#fSort').value = prefs.sort;
+  const d = $('#fDir'); d.textContent = prefs.dir === 'desc' ? '↓' : '↑'; d.title = prefs.dir === 'desc' ? '降順（押すと昇順）' : '昇順（押すと降順）'; d.setAttribute('aria-label', d.title);
 }
 
 let cur = 0;
@@ -362,6 +500,17 @@ function lowerBound(arr, t) { let lo = 0, hi = arr.length; while (lo < hi) { con
 let buildSeq = 0;
 async function buildView() {
   const s = songs[cur], mt = s.mt, seq = ++buildSeq;
+  if (!s.tube) { // TubeDTX 製でない曲: 一番上の難易度の譜面をそのまま流す（簡易化しない）
+    const notes = await loadDetail(s);
+    if (seq !== buildSeq) return false;
+    view.kept = notes.master.map(([bar, ch, slot, grid]) => ({ bar, ch, slot, grid, lvl: 2, t: (bar - 1 + slot / grid) * mt, lane: LANE_IDX[ch] })).filter((v) => v.lane != null).sort((a, b) => a.t - b.t);
+    view.removed = []; view.hand = null; view.match = null; view.stats = null; view.structure = null; view.used = {}; view.play = null;
+    view.counts = new Array((s.maxBar || 0) + 2).fill(0);
+    for (const v of view.kept) if (v.bar < view.counts.length) view.counts[v.bar]++;
+    view.masterCounts = view.counts;
+    ptr = lowerBound(view.kept, curTime());
+    return true;
+  }
   const adapt = $('#pAdapt').checked;
   if (!adapt) params.offsets = {};
   const [notes, r] = await Promise.all([loadDetail(s), api('/api/simplify', { i: s.idx, diff, params, adapt })]);
@@ -570,26 +719,76 @@ function levelToControls() { // レベルを変えたら層のスイッチをそ
 }
 function isGenerated(s, d) { return !!s.has[d]; } // 'auto'（DTX Syrup 製）か 'hand'（手作り・別ツール）
 const checkedSongs = () => songs.filter((s) => checked[s.dir]);
-function renderList() {
-  $('#songs').innerHTML = songs.map((s, i) => `
-    <li class="row" aria-current="${i === cur}">
-      <label class="sel"><input type="checkbox" data-i="${i}" ${checked[s.dir] ? 'checked' : ''} aria-label="${esc(s.clean)} を生成対象にする"></label>
-      <button class="open" data-i="${i}" title="${esc(s.clean)}">
-        <div class="cover">
-          ${s.thumb ? `<img class="thumb" src="${s.thumb}" alt="" loading="lazy">` : `<div class="thumb ph" style="background:hsl(${hue(s.title)} 55% 62%)">${Math.round(s.bpm)} BPM</div>`}
-          <div class="chips">${['beginner', 'easy'].map((d) => `<span class="chip ${isGenerated(s, d) ? 'on' : ''}" title="${d === 'beginner' ? 'Beginner' : 'Easy'} ${isGenerated(s, d) ? 'あり' : 'なし'}"></span>`).join('')}</div>
-        </div>
-        <div class="meta"><div class="t">${esc(s.clean)}</div><div class="s">${esc(s.cleanArtist || '—')} · BPM ${Math.round(s.bpm)}</div></div>
+const generatable = (list) => list.filter((s) => s.tube); // 簡易化できるのは TubeDTX 製だけ
+function rowHtml(s) {
+  const cover = s.thumb ? `<img class="thumb" src="${s.thumb}" alt="" loading="lazy">` : `<div class="thumb ph" style="background:hsl(${hue(s.title)} 55% 62%)">${Math.round(s.bpm)} BPM</div>`;
+  const chips = s.tube
+    ? ['beginner', 'easy'].map((d) => `<span class="chip ${isGenerated(s, d) ? 'on' : ''}" title="${d === 'beginner' ? 'Beginner' : 'Easy'} ${isGenerated(s, d) ? 'あり' : 'なし'}"></span>`).join('')
+    : `<span class="lv" title="TubeDTX 製ではないので簡易化できません。譜面: ${esc(s.levels.join(' / ') || '1')}">${s.levels.length || 1} 譜面</span>`;
+  return `
+    <li class="row" aria-current="${s.idx === cur}">
+      <label class="sel"><input type="checkbox" data-i="${s.idx}" ${checked[s.dir] ? 'checked' : ''} aria-label="${esc(s.clean)} をチェック"></label>
+      <button class="open" data-i="${s.idx}" title="${esc(s.clean)}${s.tube ? '' : '（TubeDTX 製ではないので簡易化できません）'}">
+        <div class="cover">${cover}<div class="chips">${chips}</div></div>
+        <div class="meta"><div class="t">${esc(s.clean)}</div><div class="s">${esc(metaLine(s))}</div></div>
       </button>
-    </li>`).join('');
-  const missing = songs.filter((s) => !isGenerated(s, 'beginner') || !isGenerated(s, 'easy')).length;
-  const sel = checkedSongs(), files = sel.reduce((a, s) => a + ['beginner', 'easy'].filter((d) => !isGenerated(s, d)).length, 0);
-  $('#status').textContent = `songlist ${songs.length} 曲 / 難易度が足りない曲 ${missing}`;
-  $('#batchBtn').textContent = !sel.length ? '生成する曲をチェックしてください' : files ? `チェックした ${sel.length} 曲を一括生成` : `チェックした ${sel.length} 曲は生成済み`;
+      <button class="fav" data-i="${s.idx}" aria-pressed="${s.fav}" aria-label="${s.fav ? '★ を外す' : '★ を付ける'}" title="${s.fav ? `★ を外す（元の箱へ戻す）` : `★ を付ける（${esc(FAV_BOX)} の箱へ移す）`}">${s.fav ? '★' : '☆'}</button>
+    </li>`;
+}
+function renderList() {
+  const visible = visibleSongs().sort(compare);
+  const groups = groupsFor(visible);
+  $('#songs').innerHTML = groups.map((g) => {
+    const folded = !!prefs.folded[g.name];
+    return `<li class="box"><button class="bh" data-box="${esc(g.name)}" aria-expanded="${!folded}" title="${folded ? '開く' : '畳む'}"><span class="bn">${esc(boxLabel(g.name))}</span><span class="n">${g.songs.length}</span><span class="f">${folded ? '+' : '−'}</span></button></li>`
+      + (folded ? '' : g.songs.map(rowHtml).join(''));
+  }).join('') || `<li class="empty">${songs.length ? '条件に合う曲がありません' : 'songlist に曲がありません'}</li>`;
+  const tube = generatable(songs), missing = tube.filter((s) => !isGenerated(s, 'beginner') || !isGenerated(s, 'easy')).length;
+  const sel = checkedSongs(), gen = generatable(sel), files = gen.reduce((a, s) => a + ['beginner', 'easy'].filter((d) => !isGenerated(s, d)).length, 0);
+  $('#status').textContent = `songlist ${songs.length} 曲（TubeDTX 製 ${tube.length}）/ 難易度が足りない曲 ${missing}` + (visible.length !== songs.length ? ` / 表示 ${visible.length}` : '');
+  $('#batchBtn').textContent = !sel.length ? '生成する曲をチェックしてください' : !gen.length ? 'チェックした曲は TubeDTX 製ではありません' : files ? `チェックした ${gen.length} 曲を一括生成` : `チェックした ${gen.length} 曲は生成済み`;
   $('#batchBtn').disabled = !files;
-  $('#applyAllBtn').textContent = sel.length ? `この設定をチェックした ${sel.length} 曲に適用` : 'チェックした曲がありません';
-  $('#applyAllBtn').disabled = !sel.length;
-  const all = $('#selAll'); all.checked = sel.length === songs.length; all.indeterminate = sel.length > 0 && sel.length < songs.length;
+  $('#moveBtn').disabled = !sel.length;
+  $('#applyAllBtn').textContent = gen.length ? `この設定をチェックした ${gen.length} 曲に適用` : 'チェックした曲がありません';
+  $('#applyAllBtn').disabled = !gen.length;
+  const vsel = visible.filter((s) => checked[s.dir]).length;
+  const all = $('#selAll'); all.checked = visible.length > 0 && vsel === visible.length; all.indeterminate = vsel > 0 && vsel < visible.length;
+}
+// ★ = お気に入りの箱へ曲フォルダを移す（外すと元の箱へ）。DTXMania が起動中はサーバーが断る
+async function toggleFav(i) {
+  const s = songs[i];
+  try {
+    const r = await api('/api/favorite', { i: s.idx, on: !s.fav });
+    applyListing(r); renderList(); if (songs[cur] && songs[cur].dir === s.dir) renderSong();
+    if (!r.ok) toast(r.message || '移せませんでした');
+    else if (!r.moved) toast('変わっていません');
+    else toast(s.fav ? `${s.clean} を ${r.box ? `${r.box} に戻しました` : '箱から出しました'}` : `${s.clean} を ${FAV_BOX} に入れました。DTXMania の次回起動で並びます`);
+  } catch (e) { toast(e.message); }
+}
+// 箱へ移す: 既存の箱を選ぶか、新しい箱の名前を入れる。チェックした曲をまとめて
+function openMove() {
+  const sel = checkedSongs(); if (!sel.length) return;
+  $('#moveTitle').textContent = sel.length === 1 ? `「${sel[0].clean}」を箱へ移す` : `チェックした ${sel.length} 曲を箱へ移す`;
+  const names = [FAV_BOX, ...boxes.map((b) => b.name).filter((n) => n !== FAV_BOX)];
+  const count = (n) => (n === '' ? songs.filter((s) => !s.box).length : (boxes.find((b) => b.name === n) || {}).count || 0);
+  const same = sel.every((s) => s.box === sel[0].box) ? sel[0].box : null; // 全部同じ箱に居るならそれを選んだ状態で開く
+  $('#moveChoices').innerHTML = [['', '箱なし（songlist 直下）'], ...names.map((n) => [n, n])].map(([v, l]) => `<label><input type="radio" name="box" value="${esc(v)}" ${v === same ? 'checked' : ''}><span>${esc(l)}</span><span class="cnt">${count(v)} 曲</span></label>`).join('');
+  $('#moveNew').value = '';
+  $('#moveDlg').showModal();
+}
+async function submitMove(e) {
+  e.preventDefault();
+  const typed = $('#moveNew').value.trim(), picked = $('#moveForm').querySelector('input[name="box"]:checked');
+  const box = typed || (picked ? picked.value : null);
+  if (box === null) { toast('箱を選ぶか、新しい箱の名前を入れてください'); return; }
+  const items = checkedSongs().map((s) => s.idx);
+  $('#moveDlg').close();
+  try {
+    const r = await api('/api/move', { items, box });
+    applyListing(r); renderList(); renderSong();
+    const moved = r.results.filter((x) => x.moved).length, bad = r.results.filter((x) => !x.ok);
+    toast(`${moved} 曲を${box ? ` ${box} に` : '箱から出して songlist 直下に'}移しました` + (bad.length ? `（${bad.length} 曲は移せません: ${bad[0].message}）` : '') + '。DTXMania の次回起動で並びます');
+  } catch (err) { toast(err.message); }
 }
 async function renderSong() {
   const s = songs[cur];
@@ -597,7 +796,8 @@ async function renderSong() {
   if (s.thumb) { img.src = s.thumb; img.style.display = ''; bg.style.backgroundImage = `url("${s.thumb}")`; $('#hero').style.background = ''; }
   else { img.removeAttribute('src'); img.style.display = 'none'; bg.style.backgroundImage = 'none'; $('#hero').style.background = `hsl(${hue(s.title)} 45% 32%)`; }
   $('#sTitle').textContent = s.clean;
-  $('#sSub').textContent = `${s.cleanArtist || 'アーティスト未設定'} · BPM ${Math.round(s.bpm)} · ${s.maxBar} 小節`;
+  $('#sSub').textContent = `${s.cleanArtist || 'アーティスト未設定'} · BPM ${Math.round(s.bpm)} · ${s.maxBar} 小節` + (s.box ? ` · 箱 ${s.box}` : '');
+  $('#songView').dataset.tube = s.tube;
   document.querySelectorAll('#diffTabs button').forEach((b) => b.setAttribute('aria-selected', b.dataset.d === diff));
   const st = s.has[diff];
   $('#writeBtn').textContent = st === 'hand' ? `${FILE[diff]} は手作りなので書きません` : `${st === 'auto' ? 'この設定で書き直す' : 'この設定で書く'}: ${FILE[diff]} と set.def`;
@@ -606,6 +806,7 @@ async function renderSong() {
   let ok;
   try { ok = await buildView(); } catch (e) { toast(`間引きに失敗: ${e.message}`); return; }
   if (!ok) return; // もっと新しい表示要求が走っている
+  if (!s.tube) { drawAll(); return; } // 表示だけ（数字・調整は無い）
   const hasHand = !!view.hand;
   $('#showHand').disabled = !hasHand;
   $('#handLabel').setAttribute('aria-disabled', !hasHand);
@@ -641,20 +842,34 @@ function setDiff(d) {
 // 題名・アーティストの直し（曲フォルダの dtx_syrup.json に保存し、set.def にも反映）
 async function editTitle() {
   const s = songs[cur];
+  if (!s.tube) { toast('TubeDTX 製でない曲の題名は set.def のまま使います'); return; }
   const title = prompt('曲名（set.def の #TITLE になります）', s.clean);
   if (title === null) return;
   const artist = prompt('アーティスト（空でも可）', s.cleanArtist || '');
   if (artist === null) return;
   try {
     const r = await api('/api/settings', { i: s.idx, title, artist });
-    applySongs(r.songs); renderList(); renderSong(); toast('曲名を保存しました');
+    applyListing(r); renderList(); renderSong(); toast('曲名を保存しました');
   } catch (e) { toast(`保存に失敗: ${e.message}`); }
 }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); }
 
-$('#songs').addEventListener('click', (e) => { const o = e.target.closest('.open'); if (o) selectSong(+o.dataset.i, true); });
+$('#songs').addEventListener('click', (e) => {
+  const f = e.target.closest('.fav'); if (f) { toggleFav(+f.dataset.i); return; }
+  const h = e.target.closest('.bh'); if (h) { prefs.folded[h.dataset.box] = !prefs.folded[h.dataset.box]; savePrefs(); renderList(); return; }
+  const o = e.target.closest('.open'); if (o) selectSong(+o.dataset.i, true);
+});
 $('#songs').addEventListener('change', (e) => { const cb = e.target.closest('input[type="checkbox"]'); if (cb) { checked[songs[+cb.dataset.i].dir] = cb.checked; renderList(); } });
-$('#selAll').addEventListener('change', (e) => { songs.forEach((s) => { checked[s.dir] = e.target.checked; }); renderList(); });
+$('#selAll').addEventListener('change', (e) => { visibleSongs().forEach((s) => { checked[s.dir] = e.target.checked; }); renderList(); });
+$('#q').addEventListener('input', (e) => { query = norm(e.target.value.trim()); renderList(); });
+$('#fBox').addEventListener('change', (e) => { prefs.box = e.target.value; savePrefs(); renderList(); });
+$('#fFilter').addEventListener('change', (e) => { prefs.filter = e.target.value; savePrefs(); renderList(); });
+$('#fSort').addEventListener('change', (e) => { prefs.sort = e.target.value; prefs.dir = SORT_DEFAULT_DIR[prefs.sort] || 'asc'; savePrefs(); syncControls(); renderList(); });
+$('#fDir').addEventListener('click', () => { prefs.dir = prefs.dir === 'desc' ? 'asc' : 'desc'; savePrefs(); syncControls(); renderList(); });
+$('#moveBtn').addEventListener('click', openMove);
+$('#moveForm').addEventListener('submit', submitMove);
+$('#moveCancel').addEventListener('click', () => $('#moveDlg').close());
+syncControls();
 // TubeDTX を裏で回す（download → separate → MIDI → score.dtx → Beginner / Easy）。進み具合は #status に出す
 let jobTimer = 0;
 const seenJobs = new Set(), dismissedJobs = new Set();
@@ -785,23 +1000,23 @@ $('#writeBtn').addEventListener('click', async () => {
   const s = songs[cur];
   try {
     const r = await api('/api/write', { i: s.idx, diff, params });
-    applySongs(r.songs); renderList(); renderSong();
+    applyListing(r); renderList(); renderSong();
     toast(r.ok ? `${FILE[diff]} と set.def を書きました。DTXMania の次回起動で出ます` : r.message);
   } catch (e) { toast(`書けませんでした: ${e.message}`); }
 });
 $('#applyAllBtn').addEventListener('click', async () => {
-  const items = checkedSongs().map((s) => s.idx);
+  const items = generatable(checkedSongs()).map((s) => s.idx);
   try {
     const r = await api('/api/batch', { items, diffs: [diff], params });
-    applySongs(r.songs); renderList(); renderSong();
+    applyListing(r); renderList(); renderSong();
     toast(`チェックした ${items.length} 曲の ${diff} に今の設定: ${describe(r.results)}`);
   } catch (e) { toast(`書けませんでした: ${e.message}`); }
 });
 $('#batchBtn').addEventListener('click', async () => {
-  const items = checkedSongs().map((s) => s.idx);
+  const items = generatable(checkedSongs()).map((s) => s.idx);
   try {
     const r = await api('/api/batch', { items, diffs: ['beginner', 'easy'] });
-    applySongs(r.songs); renderList(); renderSong();
+    applyListing(r); renderList(); renderSong();
     toast(`チェックした ${items.length} 曲: ${describe(r.results)}`);
   } catch (e) { toast(`書けませんでした: ${e.message}`); }
 });
@@ -810,7 +1025,7 @@ else window.addEventListener('resize', drawAll);
 
 (async function boot() {
   try { await refreshSongs(); } catch (e) { $('#status').textContent = `読み込めません: ${e.message}`; return; }
-  if (!songs.length) { $('#status').textContent = 'songlist に TubeDTX 製の曲がありません'; return; }
+  if (!songs.length) { $('#status').textContent = 'songlist に曲がありません'; renderList(); return; }
   params = { ...rulesFor(songs[cur], diff) }; paramsToControls();
   loadSong();
   renderList();
